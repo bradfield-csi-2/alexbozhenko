@@ -1,0 +1,55 @@
+[?2004h[?1049h[22;0;0t[?1h=[?2004h[1;27r[?12h[?12l[27m[23m[29m[m[H[2J[?25l[27;1H"~/FlameGraph/./stackcollapse.pl" 109L, 2861C[?2004l2 files to edit
+[?2004h[1;1H[35m#!/usr/bin/perl -w[m
+[34m#
+# stackcollapse.pl      collapse multiline stacks into single lines.
+#
+# Parses a multiline stack followed by a number on a separate line, and
+# outputs a semicolon separated stack followed by a space and the number.
+# If memory addresses (+0xd) are present, they are stripped, and resulting
+# identical stacks are colased with their counts summed.
+#
+# USAGE: ./stackcollapse.pl infile > outfile
+#
+# Example input:
+#
+#  unix`i86_mwait+0xd
+#  unix`cpu_idle_mwait+0xf1
+#  unix`idle+0x114
+#  unix`thread_start+0x8
+#  1641
+#
+# Example output:
+#
+#  unix`thread_start;unix`idle;unix`cpu_idle_mwait;unix`i86_mwait 1641
+#
+# Input may contain many stacks, and can be generated using DTrace.  The
+# first few lines of input are skipped (see $headerlines).
+#[m[27;101H1,1[11CTop[1;1H[?25h[?25l[27;91H^C[1;1H[27;1HType  :qa!  and press <Enter> to abandon all changes and exit Vim[27;91H[K[1;1H[27;101H1,1[11CTop[1;1H[?25h[?25l[27;91H:[1;1H[27;1H[K[27;1H:[?2004h[?25hq[?25l[?25h[?25l[97m[41mE173: 1 more file to edit[?2004h[1;1H[m[27;101H1,1[11CTop[1;1H[?25h[?25l[27;91H^Z[1;1H[27;1H
+[?2004l[?1l>[?25h[?1049l[23;0;0t[?2004l[?2004h[?1049h[22;0;0t[?1h=[?2004h[?12h[?12l[27m[23m[29m[m[H[2J[?25l[1;1H[35m#!/usr/bin/perl -w[m
+[34m#
+# stackcollapse.pl      collapse multiline stacks into single lines.
+#
+# Parses a multiline stack followed by a number on a separate line, and
+# outputs a semicolon separated stack followed by a space and the number.
+# If memory addresses (+0xd) are present, they are stripped, and resulting
+# identical stacks are colased with their counts summed.
+#
+# USAGE: ./stackcollapse.pl infile > outfile
+#
+# Example input:
+#
+#  unix`i86_mwait+0xd
+#  unix`cpu_idle_mwait+0xf1
+#  unix`idle+0x114
+#  unix`thread_start+0x8
+#  1641
+#
+# Example output:
+#
+#  unix`thread_start;unix`idle;unix`cpu_idle_mwait;unix`i86_mwait 1641
+#
+# Input may contain many stacks, and can be generated using DTrace.  The
+# first few lines of input are skipped (see $headerlines).
+#[m[27;101H1,1[11CTop[1;1H[?25h[?25l[?25h[27;1H[?2004l[?1l>[?1049l[23;0;0tVim: Caught deadly signal HUP
+Vim: Finished.
+[27;1H

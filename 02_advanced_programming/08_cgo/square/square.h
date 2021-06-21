@@ -1,0 +1,2 @@
+
+int square(int x);

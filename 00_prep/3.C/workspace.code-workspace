@@ -1,0 +1,23 @@
+{
+	"folders": [
+		{
+			"path": "../../../alexbozhenko.github.io"
+		},
+		{
+			"path": "../4.go/excercises"
+		},
+		{
+			"path": "../4.go/tour"
+		}
+	],
+	"settings": {
+		"C_Cpp.loggingLevel": "Debug",
+		"files.associations": {
+			"cstdio": "cpp",
+			"cwchar": "cpp"
+		},
+		"cSpell.words": [
+			"fsanitize"
+		]
+	}
+}

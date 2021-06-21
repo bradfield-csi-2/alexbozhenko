@@ -1,0 +1,8 @@
+{
+    "C_Cpp.loggingLevel": "Debug",
+    "git.postCommitCommand": "push",
+    "files.associations": {
+        "cstdio": "cpp",
+        "cwchar": "cpp"
+    }
+}

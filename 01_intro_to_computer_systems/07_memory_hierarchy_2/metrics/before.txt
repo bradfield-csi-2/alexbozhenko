@@ -1,0 +1,7 @@
+goos: linux
+goarch: amd64
+BenchmarkMetrics/Average_age-16         	     241	   4673055 ns/op
+BenchmarkMetrics/Average_payment-16     	      43	  28318461 ns/op
+BenchmarkMetrics/Payment_stddev-16      	      20	  54078592 ns/op
+PASS
+ok  	_/home/alex/Documents/bradfield/csi/intro_to_computer_systems/07_memory_hierarchy_2/metrics	5.821s
