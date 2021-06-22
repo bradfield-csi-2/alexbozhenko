@@ -3,9 +3,10 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
-	"fmt"
 	"net"
 	"os"
+	"syscall"
+	"time"
 )
 
 // Internent checksum
@@ -50,17 +51,14 @@ func main() {
 		host = os.Args[1]
 	}
 
-	fmt.Println("hello", host)
 	ipaddr, err := net.ResolveIPAddr("ip", host)
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println(ipaddr)
 	ipconn, err := net.DialIP("ip:icmp", nil, ipaddr)
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println(ipconn)
 
 	type icmp_echo struct {
 		icmp_type byte   // 8 for echo message;	// 0 for echo reply message.
@@ -92,10 +90,27 @@ func main() {
 	echo_msg.checksum = checksum(buf.Bytes())
 	buf = &bytes.Buffer{}
 	binary.Write(buf, binary.BigEndian, echo_msg)
-	fmt.Println(buf.Len())
-	fmt.Println(buf.Bytes())
 
 	// TODO: increase ttl starting from 1
+
+	fd, err := ipconn.File()
+	if err != nil {
+		panic(err)
+	}
+
+	ttl := byte(23)
+	// Even though https://golang.org/pkg/net/#IPConn.File says
+	//
+	// The returned os.File's file descriptor is different from the connection's.
+	// Attempting to change properties of the original using this duplicate may or may not have the desired effect.
+	//
+	// This works because both fds point to the same socket, and calling
+	// setsockopt on the duplicate fd propagates the change to the socket
+	syscall.SetsockoptByte(int(fd.Fd()), int(syscall.IPPROTO_IP), int(syscall.IP_TTL),
+		ttl)
+	time.Sleep(50 * time.Second)
+	fd.Close()
+	// error = setsockopt(send_socket, IPPROTO_IP, IP_TTL, &ttl, sizeof(ttl));
 
 	// TODO: parse responses
 
