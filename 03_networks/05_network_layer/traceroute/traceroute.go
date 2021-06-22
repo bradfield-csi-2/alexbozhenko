@@ -3,11 +3,22 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"net"
 	"os"
 	"syscall"
-	"time"
 )
+
+func receiveICMP() {
+	fmt.Println("started recevie")
+	netaddr, _ := net.ResolveIPAddr("ip4", "0.0.0.0")
+	conn, _ := net.ListenIP("ip4:icmp", netaddr)
+
+	recieveBuf := make([]byte, 1024)
+	numRead, _, _ := conn.ReadFrom(recieveBuf)
+	fmt.Println("here!")
+	fmt.Printf("% X\n", recieveBuf[:numRead])
+}
 
 // Internent checksum
 //https://datatracker.ietf.org/doc/html/rfc1071.html
@@ -51,11 +62,11 @@ func main() {
 		host = os.Args[1]
 	}
 
-	ipaddr, err := net.ResolveIPAddr("ip", host)
+	ipaddr, err := net.ResolveIPAddr("ip4", host)
 	if err != nil {
 		panic(err)
 	}
-	ipconn, err := net.DialIP("ip:icmp", nil, ipaddr)
+	ipconn, err := net.DialIP("ip4:icmp", nil, ipaddr)
 	if err != nil {
 		panic(err)
 	}
@@ -98,7 +109,7 @@ func main() {
 		panic(err)
 	}
 
-	ttl := byte(23)
+	ttl := byte(255)
 	// Even though https://golang.org/pkg/net/#IPConn.File says
 	//
 	// The returned os.File's file descriptor is different from the connection's.
@@ -108,12 +119,10 @@ func main() {
 	// setsockopt on the duplicate fd propagates the change to the socket
 	syscall.SetsockoptByte(int(fd.Fd()), int(syscall.IPPROTO_IP), int(syscall.IP_TTL),
 		ttl)
-	time.Sleep(50 * time.Second)
 	fd.Close()
-	// error = setsockopt(send_socket, IPPROTO_IP, IP_TTL, &ttl, sizeof(ttl));
+	ipconn.Write(buf.Bytes())
+	receiveICMP()
 
 	// TODO: parse responses
-
-	ipconn.Write(buf.Bytes())
 
 }
