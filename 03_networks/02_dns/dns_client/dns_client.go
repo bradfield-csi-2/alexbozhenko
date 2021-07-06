@@ -45,7 +45,6 @@ type dnsHeader struct {
 }
 
 // https://datatracker.ietf.org/doc/html/rfc1035#section-4.1.3
-
 // Each resource record has the following format:
 //                                     1  1  1  1  1  1
 //       0  1  2  3  4  5  6  7  8  9  0  1  2  3  4  5
@@ -123,9 +122,9 @@ func generateQueryPayload(hostname string) ([]byte, uint16, int) {
 	// Why does go-staticcheck says:
 	// "value cannot be used with binary.Write (SA1003)"
 	// when I try to write entire struct, like in the commented line below
+	// I guess that's because byte slice is stored as a pointer in the struct?
 	// Is writing each field individually is the right way to do that?
 	//binary.Write(buffer, binary.BigEndian, q)
-
 	binary.Write(buffer, binary.BigEndian, queryMessage.qname)
 	binary.Write(buffer, binary.BigEndian, queryMessage.qtype)
 	binary.Write(buffer, binary.BigEndian, queryMessage.qclass)
@@ -150,7 +149,6 @@ func main() {
 		// actually, multiple queries in the same message are not supported
 		// https://stackoverflow.com/a/4083071/1572363
 		panic("Usage: dns_client HOSTNAME")
-
 	} else {
 		hostname = os.Args[1]
 	}
@@ -168,8 +166,8 @@ func main() {
 	}
 
 	// TODO: In real word, what should be the buffer size, having that
-	// we do not know the size of the reponse beforehand
-	// for now, setting it to max possible size of the udp message
+	// we do not know the size of the reponse beforehand?
+	// For now, setting it to max possible size of the udp message
 	dnsResponse := make([]byte, 65535)
 	nBytesRead, _, err := unix.Recvfrom(socketFD, dnsResponse, 0)
 	if err != nil {
@@ -185,9 +183,9 @@ func main() {
 	}
 
 	if requestId != responseHeader.ID {
-		panic("Wrong request id in the response")
+		panic("Wrong request id in the response that we got. Ignoring!")
 	}
-	// ignoring original request at the beginning of RR
+	// ignoring original request at the beginning of response
 	buf.Seek(int64(queryMessageLength), io.SeekCurrent)
 
 	for rrNumber := uint16(0); rrNumber < responseHeader.Ancount; rrNumber++ {
