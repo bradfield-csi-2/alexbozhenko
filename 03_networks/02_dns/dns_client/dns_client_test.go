@@ -22,7 +22,7 @@ func Test_hostnameToQname(t *testing.T) {
 		{
 			name: "www.example.com",
 			args: args{hostname: "www.example.com"},
-			want: []byte{3, 119, 119, 199, 7, 101, 120, 97, 109, 112, 108, 101, 3, 99, 111, 109, 0},
+			want: []byte{3, 119, 119, 119, 7, 101, 120, 97, 109, 112, 108, 101, 3, 99, 111, 109, 0},
 		},
 	}
 	for _, tt := range tests {
