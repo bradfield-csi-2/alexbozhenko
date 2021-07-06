@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"math/rand"
 	"os"
@@ -11,8 +12,8 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-const host_address_type = uint16(1)
-const internet_class = uint16(1)
+const TYPE_A = 0x0001
+const CLASS_IN = 0x0001
 
 //https://datatracker.ietf.org/doc/html/rfc1035#section-4.1
 // The header contains the following fields:
@@ -33,13 +34,13 @@ const internet_class = uint16(1)
 //     +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
 
 type dnsHeader struct {
-	id                 uint16
-	qr_Opcode_AA_TC_RD uint8
+	ID                 uint16
+	QR_Opcode_AA_TC_RD uint8
 	RA_Z_Rcode         uint8
-	qdcount            uint16
-	ancount            uint16
-	nscount            uint16
-	arcount            uint16
+	Qdcount            uint16
+	Ancount            uint16
+	Nscount            uint16
+	Arcount            uint16
 }
 
 type question struct {
@@ -61,27 +62,35 @@ func hostnameToQname(hostname string) []byte {
 
 func generateQueryMessage(hostnames []string) []byte {
 	header := dnsHeader{
-		id:                 uint16(rand.Uint32()),
-		qr_Opcode_AA_TC_RD: 1, // rd = 1
+		ID:                 uint16(rand.Uint32()),
+		QR_Opcode_AA_TC_RD: 1, // rd = 1
 		RA_Z_Rcode:         0,
-		qdcount:            uint16(len(hostnames)),
-		ancount:            0,
-		nscount:            0,
-		arcount:            0,
+		Qdcount:            uint16(len(hostnames)),
+		Ancount:            0,
+		Nscount:            0,
+		Arcount:            0,
 	}
 	buffer := &bytes.Buffer{}
 	binary.Write(buffer, binary.BigEndian, header)
-	query := buffer.Bytes()
-	b := make([]byte, 2)
+	var q question
 	for _, hostname := range hostnames {
-		query = append(query, hostnameToQname(hostname)...)
-		binary.BigEndian.PutUint16(b, host_address_type)
-		query = append(query, b...)
-		binary.BigEndian.PutUint16(b, internet_class)
-		query = append(query, b...)
+		q = question{
+			qname:  hostnameToQname(hostname),
+			qtype:  TYPE_A,
+			qclass: CLASS_IN,
+		}
+
+		// Why does go-staticcheck says:
+		// "value cannot be used with binary.Write (SA1003)"
+		// when I try to write entire struct, like in the commented line below
+		// Is writing each field individually is the right way to do that?
+		//binary.Write(buffer, binary.BigEndian, q)
+		binary.Write(buffer, binary.BigEndian, q.qname)
+		binary.Write(buffer, binary.BigEndian, q.qtype)
+		binary.Write(buffer, binary.BigEndian, q.qclass)
 	}
 
-	return query
+	return buffer.Bytes()
 }
 
 func main() {
@@ -94,7 +103,7 @@ func main() {
 	var hostnames []string
 
 	if len(args) <= 0 {
-		// actually multiple queries are not supported
+		// actually, multiple queries in the same message are not supported
 		// https://stackoverflow.com/a/4083071/1572363
 		panic("Usage: dns_client HOSTNAME [HOSTNAME]...")
 
@@ -119,12 +128,24 @@ func main() {
 	}
 	fmt.Println(sockname)
 
-	dnsResponse := make([]byte, 512)
-	// dnsResponse := new([]byte)
+	// TODO: In real word, what should be the buffer size, having that
+	// we do not know the size of the reponse beforehand
+	// for now, setting it to max possible size of the udp message
+	dnsResponse := make([]byte, 65535)
+	nBytesRead, _, err := unix.Recvfrom(socketFD, dnsResponse, 0)
+	if err != nil {
+		panic(err)
+	}
+	dnsResponse = dnsResponse[:nBytesRead]
 
-	nBytesRead, fromSock, err := unix.Recvfrom(socketFD, dnsResponse, 0)
-	fmt.Println(nBytesRead, fromSock, err)
-	fmt.Println(len(dnsResponse), cap(dnsResponse), dnsResponse)
+	fmt.Println(hex.Dump(dnsResponse))
+	header := dnsHeader{}
+	buf := bytes.NewReader(dnsResponse)
+	err = binary.Read(buf, binary.BigEndian, &header)
+	if err != nil {
+		fmt.Println("binary.Read failed:", err)
+	}
+	fmt.Printf("%+v\n", header)
+	fmt.Printf("%+v\n", header)
 
-	fmt.Println(hostnames)
 }
