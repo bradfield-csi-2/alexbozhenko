@@ -3,9 +3,10 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
-	"encoding/hex"
 	"fmt"
+	"io"
 	"math/rand"
+	"net"
 	"os"
 	"strings"
 
@@ -43,6 +44,37 @@ type dnsHeader struct {
 	Arcount            uint16
 }
 
+// https://datatracker.ietf.org/doc/html/rfc1035#section-4.1.3
+
+// Each resource record has the following format:
+//                                     1  1  1  1  1  1
+//       0  1  2  3  4  5  6  7  8  9  0  1  2  3  4  5
+//     +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+//     |                                               |
+//     /                                               /
+//     /                      NAME                     /
+//     |                                               |
+//     +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+//     |                      TYPE                     |
+//     +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+//     |                     CLASS                     |
+//     +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+//     |                      TTL                      |
+//     |                                               |
+//     +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+//     |                   RDLENGTH                    |
+//     +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--|
+//     /                     RDATA                     /
+//     /                                               /
+//     +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+type resourceRecordHeader struct {
+	Name     uint16
+	Type     uint16
+	Class    uint16
+	TTL      uint32
+	RdLength uint16
+}
+
 type question struct {
 	qname  []byte
 	qtype  uint16 // https://datatracker.ietf.org/doc/html/rfc1035#section-3.2.2
@@ -60,37 +92,49 @@ func hostnameToQname(hostname string) []byte {
 	return qname
 }
 
-func generateQueryMessage(hostnames []string) []byte {
+func generateQueryHeader(id uint16) dnsHeader {
 	header := dnsHeader{
-		ID:                 uint16(rand.Uint32()),
+		ID:                 id,
 		QR_Opcode_AA_TC_RD: 1, // rd = 1
 		RA_Z_Rcode:         0,
-		Qdcount:            uint16(len(hostnames)),
+		Qdcount:            uint16(1), //We always send one query
 		Ancount:            0,
 		Nscount:            0,
 		Arcount:            0,
 	}
-	buffer := &bytes.Buffer{}
-	binary.Write(buffer, binary.BigEndian, header)
-	var q question
-	for _, hostname := range hostnames {
-		q = question{
-			qname:  hostnameToQname(hostname),
-			qtype:  TYPE_A,
-			qclass: CLASS_IN,
-		}
+	return header
+}
 
-		// Why does go-staticcheck says:
-		// "value cannot be used with binary.Write (SA1003)"
-		// when I try to write entire struct, like in the commented line below
-		// Is writing each field individually is the right way to do that?
-		//binary.Write(buffer, binary.BigEndian, q)
-		binary.Write(buffer, binary.BigEndian, q.qname)
-		binary.Write(buffer, binary.BigEndian, q.qtype)
-		binary.Write(buffer, binary.BigEndian, q.qclass)
+func generateQueryMessage(hostname string) question {
+	return question{
+		qname:  hostnameToQname(hostname),
+		qtype:  TYPE_A,
+		qclass: CLASS_IN,
 	}
+}
 
-	return buffer.Bytes()
+func generateQueryPayload(hostname string) ([]byte, uint16, int) {
+	buffer := &bytes.Buffer{}
+	id := uint16(rand.Uint32())
+	header := generateQueryHeader(id)
+	binary.Write(buffer, binary.BigEndian, header)
+	queryMessage := generateQueryMessage(hostname)
+
+	// Why does go-staticcheck says:
+	// "value cannot be used with binary.Write (SA1003)"
+	// when I try to write entire struct, like in the commented line below
+	// Is writing each field individually is the right way to do that?
+	//binary.Write(buffer, binary.BigEndian, q)
+
+	binary.Write(buffer, binary.BigEndian, queryMessage.qname)
+	binary.Write(buffer, binary.BigEndian, queryMessage.qtype)
+	binary.Write(buffer, binary.BigEndian, queryMessage.qclass)
+
+	queryMessageLength := (binary.Size(queryMessage.qname) +
+		binary.Size(queryMessage.qtype) +
+		binary.Size(queryMessage.qclass))
+
+	return buffer.Bytes(), id, queryMessageLength
 }
 
 func main() {
@@ -100,15 +144,15 @@ func main() {
 	}
 
 	args := os.Args[1:]
-	var hostnames []string
+	var hostname string
 
-	if len(args) <= 0 {
+	if len(args) != 1 {
 		// actually, multiple queries in the same message are not supported
 		// https://stackoverflow.com/a/4083071/1572363
-		panic("Usage: dns_client HOSTNAME [HOSTNAME]...")
+		panic("Usage: dns_client HOSTNAME")
 
 	} else {
-		hostnames = os.Args[1:]
+		hostname = os.Args[1]
 	}
 
 	socketFD, err := unix.Socket(unix.AF_INET, unix.SOCK_DGRAM, 0)
@@ -116,17 +160,12 @@ func main() {
 		panic(err)
 	}
 
-	query := generateQueryMessage(hostnames)
+	query, requestId, queryMessageLength := generateQueryPayload(hostname)
 
 	err = unix.Sendto(socketFD, query, 0, &cloudFareDNSSockAddr)
 	if err != nil {
 		panic(err)
 	}
-	sockname, err := unix.Getsockname(socketFD)
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println(sockname)
 
 	// TODO: In real word, what should be the buffer size, having that
 	// we do not know the size of the reponse beforehand
@@ -138,14 +177,32 @@ func main() {
 	}
 	dnsResponse = dnsResponse[:nBytesRead]
 
-	fmt.Println(hex.Dump(dnsResponse))
-	header := dnsHeader{}
+	responseHeader := dnsHeader{}
 	buf := bytes.NewReader(dnsResponse)
-	err = binary.Read(buf, binary.BigEndian, &header)
+	err = binary.Read(buf, binary.BigEndian, &responseHeader)
 	if err != nil {
 		fmt.Println("binary.Read failed:", err)
 	}
-	fmt.Printf("%+v\n", header)
-	fmt.Printf("%+v\n", header)
 
+	if requestId != responseHeader.ID {
+		panic("Wrong request id in the response")
+	}
+	// ignoring original request at the beginning of RR
+	buf.Seek(int64(queryMessageLength), io.SeekCurrent)
+
+	for rrNumber := uint16(0); rrNumber < responseHeader.Ancount; rrNumber++ {
+		rrHeader := resourceRecordHeader{}
+		err = binary.Read(buf, binary.BigEndian, &rrHeader)
+		if err != nil {
+			fmt.Println("binary.Read failed:", err)
+		}
+
+		ip := make([]byte, rrHeader.RdLength)
+		err = binary.Read(buf, binary.BigEndian, &ip)
+		if err != nil {
+			fmt.Println("binary.Read failed:", err)
+		}
+		fmt.Println(net.IPv4(ip[0], ip[1], ip[2], ip[3]))
+
+	}
 }
