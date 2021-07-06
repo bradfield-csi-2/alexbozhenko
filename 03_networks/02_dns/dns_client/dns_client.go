@@ -87,13 +87,13 @@ func generateQueryMessage(hostnames []string) []byte {
 func main() {
 	cloudFareDNSSockAddr := unix.SockaddrInet4{
 		Port: 53,
-		Addr: [4]byte{192, 168, 0, 1}, //cloudfare DNS
+		Addr: [4]byte{1, 1, 1, 1}, //cloudfare DNS
 	}
 
 	args := os.Args[1:]
 	var hostnames []string
 
-	if len(args) <= 1 {
+	if len(args) <= 0 {
 		// actually multiple queries are not supported
 		// https://stackoverflow.com/a/4083071/1572363
 		panic("Usage: dns_client HOSTNAME [HOSTNAME]...")
@@ -113,6 +113,18 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	sockname, err := unix.Getsockname(socketFD)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(sockname)
+
+	dnsResponse := make([]byte, 512)
+	// dnsResponse := new([]byte)
+
+	nBytesRead, fromSock, err := unix.Recvfrom(socketFD, dnsResponse, 0)
+	fmt.Println(nBytesRead, fromSock, err)
+	fmt.Println(len(dnsResponse), cap(dnsResponse), dnsResponse)
 
 	fmt.Println(hostnames)
 }
