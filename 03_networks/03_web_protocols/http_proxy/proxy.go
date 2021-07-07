@@ -33,11 +33,8 @@ func main() {
 	buf := make([]byte, 30)
 
 	for {
-		//3time.Sleep(190 * time.Second)
 		nBytesRead, _, err := unix.Recvfrom(connectionSocketFD, buf, 0)
-		//fmt.Printf("len=%d cap=%d %v\n", len(buf), cap(buf), buf)
-		//fmt.Println(hex.Dump(buf))
-		fmt.Println(string(buf))
+		fmt.Printf("%s", (buf))
 		handleError(err)
 		if nBytesRead == 0 {
 			// according to man 2 recv,
@@ -47,7 +44,6 @@ func main() {
 		}
 		err = unix.Sendto(connectionSocketFD, buf[:nBytesRead], 0, clientSockAddr)
 		handleError(err)
-		//fmt.Printf("len=%d cap=%d %v\n", len(buf), cap(buf), buf)
 	}
 
 }
