@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"io"
 	"net/http"
 	"sync"
 
@@ -61,7 +60,7 @@ func handleClient(proxyListeningSocketFD int, waitGroup *sync.WaitGroup) {
 
 	request, err := http.ReadRequest(bufio.NewReader(&client_proxySocketReaderWriter))
 	handleError(err)
-	fmt.Println(request)
+	//	fmt.Println(request)
 
 	webServerSockAddr := &unix.SockaddrInet4{
 		Port: 9000,
@@ -76,7 +75,7 @@ func handleClient(proxyListeningSocketFD int, waitGroup *sync.WaitGroup) {
 		socketFD:       webServerSocketFD,
 		sendToSockAddr: webServerSockAddr,
 	}
-	fmt.Printf("%v %v", proxy_serverSocketReaderWriter.socketFD, proxy_serverSocketReaderWriter.sendToSockAddr)
+	//	fmt.Printf("%v %v", proxy_serverSocketReaderWriter.socketFD, proxy_serverSocketReaderWriter.sendToSockAddr)
 
 	//writer := bufio.NewWriter(&webServerSocketWriter)
 	//	io.Writer
@@ -86,12 +85,12 @@ func handleClient(proxyListeningSocketFD int, waitGroup *sync.WaitGroup) {
 
 	response, err := http.ReadResponse(bufio.NewReader(&proxy_serverSocketReaderWriter), nil)
 	handleError(err)
-	body, err := io.ReadAll(response.Body)
-	handleError(err)
-	response.Body.Close()
-	fmt.Println(response.Header)
-	fmt.Printf("%s\n", body)
+	// body, err := io.ReadAll(response.Body)
+	// handleError(err)
+	// fmt.Println(response.Header)
+	// fmt.Printf("%s\n", body)
 
+	// Body will be closed by write
 	response.Write(&client_proxySocketReaderWriter)
 
 	//	writer.Flush()
