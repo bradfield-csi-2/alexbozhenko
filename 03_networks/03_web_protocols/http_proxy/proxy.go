@@ -18,11 +18,25 @@ func handleClient(listeningSocketFD int, waitGroup *sync.WaitGroup) {
 	fmt.Printf("waitGroup: %v\n", waitGroup)
 
 	connectionSocketFD, clientSockAddr, err := unix.Accept(listeningSocketFD)
-	handleError(err)
 	defer unix.Close(connectionSocketFD)
+	handleError(err)
 
+	// As soon as connection was accepted by listen(),
+	// we just create another goroutine that will block on listen(),
+	// waiting for next connection to accept
 	waitGroup.Add(1)
 	go handleClient(listeningSocketFD, waitGroup)
+
+	destinationSockAddr := &unix.SockaddrInet4{
+		Port: 1026,
+		Addr: [4]byte{192, 168, 1, 3},
+	}
+
+	destinationSocketFD, err := unix.Socket(unix.AF_INET, unix.SOCK_STREAM, 0)
+	defer unix.Close(destinationSocketFD)
+	handleError(err)
+	err = unix.Connect(destinationSocketFD, destinationSockAddr)
+	handleError(err)
 
 	// same size as sysctl net.core.rmem_max
 	buf := make([]byte, 212992)
@@ -36,7 +50,7 @@ func handleClient(listeningSocketFD int, waitGroup *sync.WaitGroup) {
 			// file" return).
 			break
 		}
-		err = unix.Sendto(connectionSocketFD, buf[:nBytesRead], 0, clientSockAddr)
+		err = unix.Sendto(destinationSocketFD, buf[:nBytesRead], 0, clientSockAddr)
 		handleError(err)
 	}
 
