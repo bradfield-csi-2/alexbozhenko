@@ -2,8 +2,8 @@ package main
 
 import (
 	"bufio"
-	"bytes"
 	"fmt"
+	"io"
 	"net/http"
 	"sync"
 
@@ -11,6 +11,21 @@ import (
 )
 
 const HTTP_HEADER_DELIMETER string = "\r\n\r\n"
+
+type socketReaderWriter struct {
+	socketFD       int
+	sendToSockAddr unix.Sockaddr
+}
+
+func (s *socketReaderWriter) Read(p []byte) (n int, err error) {
+	n, _, err = unix.Recvfrom(s.socketFD, p, 0)
+	return
+}
+
+func (s *socketReaderWriter) Write(p []byte) (n int, err error) {
+	err = unix.Sendto(s.socketFD, p, 0, s.sendToSockAddr)
+	return len(p), err
+}
 
 func handleError(err error) {
 	if err != nil {
@@ -22,8 +37,9 @@ func handleClient(proxyListeningSocketFD int, waitGroup *sync.WaitGroup) {
 	defer waitGroup.Done()
 	fmt.Printf("waitGroup: %v\n", waitGroup)
 
-	proxyIncomingConnectionSocketFD, clientSockAddr, err := unix.Accept(proxyListeningSocketFD)
-	defer unix.Close(proxyIncomingConnectionSocketFD)
+	client_proxySocketFD, proxy_clientSockAddr, err :=
+		unix.Accept(proxyListeningSocketFD)
+	defer unix.Close(client_proxySocketFD)
 	handleError(err)
 
 	// As soon as connection was accepted by listen(),
@@ -34,46 +50,77 @@ func handleClient(proxyListeningSocketFD int, waitGroup *sync.WaitGroup) {
 	waitGroup.Add(1)
 	go handleClient(proxyListeningSocketFD, waitGroup)
 
-	destinationSockAddr := &unix.SockaddrInet4{
+	// same size as sysctl net.core.rmem_max
+	//buf := make([]byte, 212992)
+	//	sendBuffer := []byte{}
+
+	client_proxySocketReaderWriter := socketReaderWriter{
+		socketFD:       client_proxySocketFD,
+		sendToSockAddr: proxy_clientSockAddr,
+	}
+
+	request, err := http.ReadRequest(bufio.NewReader(&client_proxySocketReaderWriter))
+	handleError(err)
+	fmt.Println(request)
+
+	webServerSockAddr := &unix.SockaddrInet4{
 		Port: 9000,
 		Addr: [4]byte{127, 0, 0, 1},
 	}
-
-	destinationSocketFD, err := unix.Socket(unix.AF_INET, unix.SOCK_STREAM, 0)
-	defer unix.Close(destinationSocketFD)
+	webServerSocketFD, err := unix.Socket(unix.AF_INET, unix.SOCK_STREAM, 0)
+	defer unix.Close(webServerSocketFD)
 	handleError(err)
-	err = unix.Connect(destinationSocketFD, destinationSockAddr)
+	err = unix.Connect(webServerSocketFD, webServerSockAddr)
 	handleError(err)
-
-	// same size as sysctl net.core.rmem_max
-	buf := make([]byte, 212992)
-	sendBuffer := []byte{}
-
-	for {
-		nBytesRead, _, err := unix.Recvfrom(proxyIncomingConnectionSocketFD, buf, 0)
-		handleError(err)
-		if nBytesRead == 0 {
-			// according to man 2 recv,
-			// When a stream socket peer has performed an orderly shutdown, the return value will be 0 (the traditional "end-of-
-			// file" return).
-			break
-		}
-		// having tcp a stream of bytes, we collect the stream to sendBuffer
-		// until we found http headers delimeter
-		// (assuming that we have a GET request, we have no body)
-		if delimeterIndex := bytes.LastIndex(buf[:nBytesRead],
-			[]byte(HTTP_HEADER_DELIMETER)); delimeterIndex == -1 {
-			sendBuffer = append(sendBuffer, buf[:nBytesRead]...)
-		} else {
-			sendBuffer = append(sendBuffer, buf[:delimeterIndex+len(HTTP_HEADER_DELIMETER)]...)
-			request, err := http.ReadRequest(bufio.NewReader(bytes.NewReader(sendBuffer)))
-			handleError(err)
-			fmt.Println(request)
-			err = unix.Sendto(destinationSocketFD, sendBuffer, 0, clientSockAddr)
-			handleError(err)
-			sendBuffer = buf[delimeterIndex+len(HTTP_HEADER_DELIMETER) : nBytesRead]
-		}
+	proxy_serverSocketReaderWriter := socketReaderWriter{
+		socketFD:       webServerSocketFD,
+		sendToSockAddr: webServerSockAddr,
 	}
+	fmt.Printf("%v %v", proxy_serverSocketReaderWriter.socketFD, proxy_serverSocketReaderWriter.sendToSockAddr)
+
+	//writer := bufio.NewWriter(&webServerSocketWriter)
+	//	io.Writer
+	//io.Writer
+
+	request.Write(&proxy_serverSocketReaderWriter)
+
+	response, err := http.ReadResponse(bufio.NewReader(&proxy_serverSocketReaderWriter), nil)
+	handleError(err)
+	body, err := io.ReadAll(response.Body)
+	handleError(err)
+	response.Body.Close()
+	fmt.Println(response.Header)
+	fmt.Printf("%s\n", body)
+
+	response.Write(&client_proxySocketReaderWriter)
+
+	//	writer.Flush()
+
+	// for {
+	// 	nBytesRead, _, err := unix.Recvfrom(proxyIncomingConnectionSocketFD, buf, 0)
+	// 	handleError(err)
+	// 	if nBytesRead == 0 {
+	// 		// according to man 2 recv,
+	// 		// When a stream socket peer has performed an orderly shutdown, the return value will be 0 (the traditional "end-of-
+	// 		// file" return).
+	// 		break
+	// 	}
+	// 	// having tcp a stream of bytes, we collect the stream to sendBuffer
+	// 	// until we found http headers delimeter
+	// 	// (assuming that we have a GET request, we have no body)
+	// 	if delimeterIndex := bytes.LastIndex(buf[:nBytesRead],
+	// 		[]byte(HTTP_HEADER_DELIMETER)); delimeterIndex == -1 {
+	// 		sendBuffer = append(sendBuffer, buf[:nBytesRead]...)
+	// 	} else {
+	// 		sendBuffer = append(sendBuffer, buf[:delimeterIndex+len(HTTP_HEADER_DELIMETER)]...)
+	// 		request, err := http.ReadRequest(bufio.NewReader(bytes.NewReader(sendBuffer)))
+	// 		handleError(err)
+	// 		fmt.Println(request)
+	// 		err = unix.Sendto(destinationSocketFD, sendBuffer, 0, clientSockAddr)
+	// 		handleError(err)
+	// 		sendBuffer = buf[delimeterIndex+len(HTTP_HEADER_DELIMETER) : nBytesRead]
+	// 	}
+	//}
 
 }
 
