@@ -28,8 +28,8 @@ func handleClient(listeningSocketFD int, waitGroup *sync.WaitGroup) {
 	go handleClient(listeningSocketFD, waitGroup)
 
 	destinationSockAddr := &unix.SockaddrInet4{
-		Port: 1026,
-		Addr: [4]byte{192, 168, 1, 3},
+		Port: 9000,
+		Addr: [4]byte{127, 0, 0, 1},
 	}
 
 	destinationSocketFD, err := unix.Socket(unix.AF_INET, unix.SOCK_STREAM, 0)
@@ -50,6 +50,7 @@ func handleClient(listeningSocketFD int, waitGroup *sync.WaitGroup) {
 			// file" return).
 			break
 		}
+		fmt.Printf("%s", buf[:nBytesRead])
 		err = unix.Sendto(destinationSocketFD, buf[:nBytesRead], 0, clientSockAddr)
 		handleError(err)
 	}
@@ -62,10 +63,21 @@ func main() {
 	defer unix.Close(listeningSocketFD)
 	handleError(err)
 	err = unix.Bind(listeningSocketFD, &unix.SockaddrInet4{
-		Port: 1025,
+		Port: 8000,
 		Addr: [4]byte{0, 0, 0, 0},
 	})
 	handleError(err)
+
+	// Let's close the socket using RST, so we do not have to wait for sockets in
+	// TIME_WAIT to expire when the program is closed, and we want to restart
+	// immediately.
+	err = unix.SetsockoptLinger(listeningSocketFD, unix.SOL_SOCKET, unix.SO_LINGER,
+		&unix.Linger{
+			Onoff:  1,
+			Linger: 0,
+		})
+	handleError(err)
+
 	err = unix.Listen(listeningSocketFD, 1)
 	handleError(err)
 	wg.Add(1)
