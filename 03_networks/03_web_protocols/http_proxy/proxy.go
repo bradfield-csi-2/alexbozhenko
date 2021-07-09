@@ -2,13 +2,32 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"net/http"
+	"net/url"
 	"runtime"
 	"sync"
 
 	"golang.org/x/sys/unix"
 )
+
+var proxyListeningSocketBacklogSize = 1000
+
+type cachedResponse struct {
+	mutex sync.RWMutex
+	// Would it be possible to store the reponse(with body) in the map somehow,
+	// instead of storing the bytes?
+	response []byte
+}
+
+var cacheWriteMutex sync.RWMutex
+var cacheMap = map[url.URL]*cachedResponse{}
+
+var webServerSockAddr = &unix.SockaddrInet4{
+	Port: 9000,
+	Addr: [4]byte{127, 0, 0, 1},
+}
 
 type socketReaderWriter struct {
 	socketFD       int
@@ -46,7 +65,6 @@ func handleClient(proxyListeningSocketFD int, waitGroup *sync.WaitGroup) {
 		unix.Accept(proxyListeningSocketFD)
 	defer unix.Close(client_proxySocketFD)
 	handleErrorExitGoroutine(err)
-	fmt.Println(proxy_clientSockAddr)
 
 	// As soon as connection was accepted by listen(),
 	// we just create another goroutine that will block on listen(),
@@ -61,76 +79,52 @@ func handleClient(proxyListeningSocketFD int, waitGroup *sync.WaitGroup) {
 		sendToSockAddr: proxy_clientSockAddr,
 	}
 
-	request, err := http.ReadRequest(bufio.NewReader(&client_proxySocketReaderWriter))
+	clientRequest, err := http.ReadRequest(bufio.NewReader(&client_proxySocketReaderWriter))
 	handleErrorExitGoroutine(err)
 
-	webServerSockAddr := &unix.SockaddrInet4{
-		Port: 9000,
-		Addr: [4]byte{127, 0, 0, 1},
+	cacheWriteMutex.RLock()
+	responseFromCache, responseFoundInCache := cacheMap[*clientRequest.URL]
+	cacheWriteMutex.RUnlock()
+
+	if responseFoundInCache {
+		responseFromCache.mutex.RLock()
+		parsedResponse, _ := http.ReadResponse(bufio.NewReader(bytes.NewReader(responseFromCache.response)), nil)
+		parsedResponse.Write(&client_proxySocketReaderWriter)
+		fmt.Printf("The key %v was returned from cache\n", clientRequest.URL.Path)
+		responseFromCache.mutex.RUnlock()
+	} else {
+		webServerSocketFD, err := unix.Socket(unix.AF_INET, unix.SOCK_STREAM, 0)
+		defer unix.Close(webServerSocketFD)
+		handleErrorExitGoroutine(err)
+		err = unix.Connect(webServerSocketFD, webServerSockAddr)
+		handleErrorExitGoroutine(err)
+		proxy_serverSocketReaderWriter := socketReaderWriter{
+			socketFD:       webServerSocketFD,
+			sendToSockAddr: webServerSockAddr,
+		}
+		clientRequest.Write(&proxy_serverSocketReaderWriter)
+
+		serverResponse, err := http.ReadResponse(bufio.NewReader(&proxy_serverSocketReaderWriter),
+			nil)
+		handleErrorExitGoroutine(err)
+		// strace-ing the program shows that body is in fact(as documented)
+		// is read on demand. There is no recvfrom() syscalls for getting the body
+		// unless we ask for it with io.Readall or response.Write
+
+		var b bytes.Buffer
+		// Response body will be closed by the call to Write
+		serverResponse.Write(&b)
+
+		cacheWriteMutex.Lock()
+		cacheMap[*clientRequest.URL] = &cachedResponse{
+			mutex:    sync.RWMutex{},
+			response: b.Bytes(),
+		}
+		cacheWriteMutex.Unlock()
+		fmt.Printf("The key %v was stored in cache\n", clientRequest.URL.Path)
+
+		client_proxySocketReaderWriter.Write(b.Bytes())
 	}
-	webServerSocketFD, err := unix.Socket(unix.AF_INET, unix.SOCK_STREAM, 0)
-	defer unix.Close(webServerSocketFD)
-	handleErrorExitGoroutine(err)
-	err = unix.Connect(webServerSocketFD, webServerSockAddr)
-	handleErrorExitGoroutine(err)
-	proxy_serverSocketReaderWriter := socketReaderWriter{
-		socketFD:       webServerSocketFD,
-		sendToSockAddr: webServerSockAddr,
-	}
-	request.Write(&proxy_serverSocketReaderWriter)
-	//fmt.Printf("request: %+v\n", request)
-	//fmt.Println("host", request.Host)
-	//fmt.Println(request.URL)
-
-	response, err := http.ReadResponse(bufio.NewReader(&proxy_serverSocketReaderWriter), nil)
-	handleErrorExitGoroutine(err)
-	// stracing the program shows that body is in fact(as documented)
-	// is read on demand. There is no recvfrom() syscalls for getting the body
-	// unless we ask for it with io.Readall or response.Write
-
-	// body, err := io.ReadAll(response.Body)
-	// handleError(err)
-	// fmt.Println(response.Header)
-	// fmt.Printf("%s\n", body)
-
-	// we can create a new buffer
-	// var b bytes.Buffer
-	// response.Write(&b)
-
-	// and parse it back to then send.
-	// Would it be possible to store the reponse(with body) in the map somehow,
-	// instead of storing the bytes?
-	// newresp, _ := http.ReadResponse(bufio.NewReader(&b), nil)
-	// newresp.Write(&client_proxySocketReaderWriter)
-
-	// Body will be closed by write
-	response.Write(&client_proxySocketReaderWriter)
-
-	// for {
-	// 	nBytesRead, _, err := unix.Recvfrom(proxyIncomingConnectionSocketFD, buf, 0)
-	// 	handleError(err)
-	// 	if nBytesRead == 0 {
-	// 		// according to man 2 recv,
-	// 		// When a stream socket peer has performed an orderly shutdown, the return value will be 0 (the traditional "end-of-
-	// 		// file" return).
-	// 		break
-	// 	}
-	// 	// having tcp a stream of bytes, we collect the stream to sendBuffer
-	// 	// until we found http headers delimeter
-	// 	// (assuming that we have a GET request, we have no body)
-	// 	if delimeterIndex := bytes.LastIndex(buf[:nBytesRead],
-	// 		[]byte(HTTP_HEADER_DELIMETER)); delimeterIndex == -1 {
-	// 		sendBuffer = append(sendBuffer, buf[:nBytesRead]...)
-	// 	} else {
-	// 		sendBuffer = append(sendBuffer, buf[:delimeterIndex+len(HTTP_HEADER_DELIMETER)]...)
-	// 		request, err := http.ReadRequest(bufio.NewReader(bytes.NewReader(sendBuffer)))
-	// 		handleError(err)
-	// 		fmt.Println(request)
-	// 		err = unix.Sendto(destinationSocketFD, sendBuffer, 0, clientSockAddr)
-	// 		handleError(err)
-	// 		sendBuffer = buf[delimeterIndex+len(HTTP_HEADER_DELIMETER) : nBytesRead]
-	// 	}
-	//}
 
 }
 
@@ -155,7 +149,7 @@ func main() {
 		})
 	handleErrorPanic(err)
 
-	err = unix.Listen(proxyListeningSocketFD, 1)
+	err = unix.Listen(proxyListeningSocketFD, proxyListeningSocketBacklogSize)
 	handleErrorPanic(err)
 	wg.Add(1)
 	go handleClient(proxyListeningSocketFD, &wg)
