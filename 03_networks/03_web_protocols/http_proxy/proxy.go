@@ -78,13 +78,30 @@ func handleClient(proxyListeningSocketFD int, waitGroup *sync.WaitGroup) {
 		sendToSockAddr: webServerSockAddr,
 	}
 	request.Write(&proxy_serverSocketReaderWriter)
+	//fmt.Printf("request: %+v\n", request)
+	//fmt.Println("host", request.Host)
+	//fmt.Println(request.URL)
 
 	response, err := http.ReadResponse(bufio.NewReader(&proxy_serverSocketReaderWriter), nil)
 	handleErrorExitGoroutine(err)
+	// stracing the program shows that body is in fact(as documented)
+	// is read on demand. There is no recvfrom() syscalls for getting the body
+	// unless we ask for it with io.Readall or response.Write
+
 	// body, err := io.ReadAll(response.Body)
 	// handleError(err)
 	// fmt.Println(response.Header)
 	// fmt.Printf("%s\n", body)
+
+	// we can create a new buffer
+	// var b bytes.Buffer
+	// response.Write(&b)
+
+	// and parse it back to then send.
+	// Would it be possible to store the reponse(with body) in the map somehow,
+	// instead of storing the bytes?
+	// newresp, _ := http.ReadResponse(bufio.NewReader(&b), nil)
+	// newresp.Write(&client_proxySocketReaderWriter)
 
 	// Body will be closed by write
 	response.Write(&client_proxySocketReaderWriter)
