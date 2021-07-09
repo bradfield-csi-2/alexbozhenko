@@ -4,12 +4,11 @@ import (
 	"bufio"
 	"fmt"
 	"net/http"
+	"runtime"
 	"sync"
 
 	"golang.org/x/sys/unix"
 )
-
-const HTTP_HEADER_DELIMETER string = "\r\n\r\n"
 
 type socketReaderWriter struct {
 	socketFD       int
@@ -26,9 +25,16 @@ func (s *socketReaderWriter) Write(p []byte) (n int, err error) {
 	return len(p), err
 }
 
-func handleError(err error) {
+func handleErrorPanic(err error) {
 	if err != nil {
 		panic(err)
+	}
+}
+
+func handleErrorExitGoroutine(err error) {
+	if err != nil {
+		fmt.Println(err)
+		runtime.Goexit()
 	}
 }
 
@@ -39,7 +45,8 @@ func handleClient(proxyListeningSocketFD int, waitGroup *sync.WaitGroup) {
 	client_proxySocketFD, proxy_clientSockAddr, err :=
 		unix.Accept(proxyListeningSocketFD)
 	defer unix.Close(client_proxySocketFD)
-	handleError(err)
+	handleErrorExitGoroutine(err)
+	fmt.Println(proxy_clientSockAddr)
 
 	// As soon as connection was accepted by listen(),
 	// we just create another goroutine that will block on listen(),
@@ -49,18 +56,13 @@ func handleClient(proxyListeningSocketFD int, waitGroup *sync.WaitGroup) {
 	waitGroup.Add(1)
 	go handleClient(proxyListeningSocketFD, waitGroup)
 
-	// same size as sysctl net.core.rmem_max
-	//buf := make([]byte, 212992)
-	//	sendBuffer := []byte{}
-
 	client_proxySocketReaderWriter := socketReaderWriter{
 		socketFD:       client_proxySocketFD,
 		sendToSockAddr: proxy_clientSockAddr,
 	}
 
 	request, err := http.ReadRequest(bufio.NewReader(&client_proxySocketReaderWriter))
-	handleError(err)
-	//	fmt.Println(request)
+	handleErrorExitGoroutine(err)
 
 	webServerSockAddr := &unix.SockaddrInet4{
 		Port: 9000,
@@ -68,23 +70,17 @@ func handleClient(proxyListeningSocketFD int, waitGroup *sync.WaitGroup) {
 	}
 	webServerSocketFD, err := unix.Socket(unix.AF_INET, unix.SOCK_STREAM, 0)
 	defer unix.Close(webServerSocketFD)
-	handleError(err)
+	handleErrorExitGoroutine(err)
 	err = unix.Connect(webServerSocketFD, webServerSockAddr)
-	handleError(err)
+	handleErrorExitGoroutine(err)
 	proxy_serverSocketReaderWriter := socketReaderWriter{
 		socketFD:       webServerSocketFD,
 		sendToSockAddr: webServerSockAddr,
 	}
-	//	fmt.Printf("%v %v", proxy_serverSocketReaderWriter.socketFD, proxy_serverSocketReaderWriter.sendToSockAddr)
-
-	//writer := bufio.NewWriter(&webServerSocketWriter)
-	//	io.Writer
-	//io.Writer
-
 	request.Write(&proxy_serverSocketReaderWriter)
 
 	response, err := http.ReadResponse(bufio.NewReader(&proxy_serverSocketReaderWriter), nil)
-	handleError(err)
+	handleErrorExitGoroutine(err)
 	// body, err := io.ReadAll(response.Body)
 	// handleError(err)
 	// fmt.Println(response.Header)
@@ -92,8 +88,6 @@ func handleClient(proxyListeningSocketFD int, waitGroup *sync.WaitGroup) {
 
 	// Body will be closed by write
 	response.Write(&client_proxySocketReaderWriter)
-
-	//	writer.Flush()
 
 	// for {
 	// 	nBytesRead, _, err := unix.Recvfrom(proxyIncomingConnectionSocketFD, buf, 0)
@@ -127,12 +121,12 @@ func main() {
 	var wg sync.WaitGroup
 	proxyListeningSocketFD, err := unix.Socket(unix.AF_INET, unix.SOCK_STREAM, 0)
 	defer unix.Close(proxyListeningSocketFD)
-	handleError(err)
+	handleErrorPanic(err)
 	err = unix.Bind(proxyListeningSocketFD, &unix.SockaddrInet4{
 		Port: 8000,
 		Addr: [4]byte{0, 0, 0, 0},
 	})
-	handleError(err)
+	handleErrorPanic(err)
 
 	// Let's close the socket using RST, so we do not have to wait for sockets in
 	// TIME_WAIT to expire when the program is closed, and we want to restart
@@ -142,10 +136,10 @@ func main() {
 			Onoff:  1,
 			Linger: 0,
 		})
-	handleError(err)
+	handleErrorPanic(err)
 
 	err = unix.Listen(proxyListeningSocketFD, 1)
-	handleError(err)
+	handleErrorPanic(err)
 	wg.Add(1)
 	go handleClient(proxyListeningSocketFD, &wg)
 	wg.Wait()
