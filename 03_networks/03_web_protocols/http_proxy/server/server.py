@@ -1,6 +1,7 @@
 import argparse
 import http.server
 import json
+import time
 from socketserver import ThreadingMixIn
 
 
@@ -14,7 +15,12 @@ class JSONHeaderReporter(http.server.BaseHTTPRequestHandler):
         body = json.dumps(dict(self.headers), indent=4).encode('utf8')
         self.send_header('Content-Length', str(len(body)))
         self.end_headers()
-        self.wfile.write(body)
+        i = 0
+        step = 20
+        while i < len(body):
+            self.wfile.write(body[i:i+step])
+            time.sleep(0.1)
+            i += step
 
     do_POST = do_GET
 
