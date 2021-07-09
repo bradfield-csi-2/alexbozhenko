@@ -12,6 +12,8 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+var KEEP_ALIVE = "Keep-Alive"
+
 var proxyListeningSocketBacklogSize = 1000
 
 type cachedResponse struct {
@@ -79,51 +81,76 @@ func handleClient(proxyListeningSocketFD int, waitGroup *sync.WaitGroup) {
 		sendToSockAddr: proxy_clientSockAddr,
 	}
 
-	clientRequest, err := http.ReadRequest(bufio.NewReader(&client_proxySocketReaderWriter))
-	handleErrorExitGoroutine(err)
+	// Since we are using Keep-Alive, we are not exiting the
+	// goroutine, but instead keep looping, trying to
+	// read from the proxy client if klient keep sending data
+	// on the same socket
+	// TODO: but how do we exit?
+	for {
+		fmt.Println("started loop")
 
-	cacheWriteMutex.RLock()
-	responseFromCache, responseFoundInCache := cacheMap[*clientRequest.URL]
-	cacheWriteMutex.RUnlock()
+		clientRequest, err := http.ReadRequest(bufio.NewReader(&client_proxySocketReaderWriter))
+		handleErrorExitGoroutine(err)
 
-	if responseFoundInCache {
-		responseFromCache.mutex.RLock()
-		parsedResponse, _ := http.ReadResponse(bufio.NewReader(bytes.NewReader(responseFromCache.response)), nil)
-		parsedResponse.Write(&client_proxySocketReaderWriter)
-		fmt.Printf("The key %v was returned from cache\n", clientRequest.URL.Path)
-		responseFromCache.mutex.RUnlock()
-	} else {
-		webServerSocketFD, err := unix.Socket(unix.AF_INET, unix.SOCK_STREAM, 0)
-		defer unix.Close(webServerSocketFD)
-		handleErrorExitGoroutine(err)
-		err = unix.Connect(webServerSocketFD, webServerSockAddr)
-		handleErrorExitGoroutine(err)
-		proxy_serverSocketReaderWriter := socketReaderWriter{
-			socketFD:       webServerSocketFD,
-			sendToSockAddr: webServerSockAddr,
+		cacheWriteMutex.RLock()
+		responseFromCache, responseFoundInCache := cacheMap[*clientRequest.URL]
+		cacheWriteMutex.RUnlock()
+
+		if responseFoundInCache {
+			responseFromCache.mutex.RLock()
+			parsedResponse, _ := http.ReadResponse(bufio.NewReader(
+				bytes.NewReader(responseFromCache.response)), nil)
+
+			//Set keep-alive in the response that will be sent from our proxy
+			parsedResponse.Close = false
+			parsedResponse.Header.Set("Connection", KEEP_ALIVE)
+			parsedResponse.Write(&client_proxySocketReaderWriter)
+
+			fmt.Printf("The key %v was returned from cache\n", clientRequest.URL.Path)
+			responseFromCache.mutex.RUnlock()
+		} else {
+			webServerSocketFD, err := unix.Socket(unix.AF_INET, unix.SOCK_STREAM, 0)
+			defer unix.Close(webServerSocketFD)
+			handleErrorExitGoroutine(err)
+			err = unix.Connect(webServerSocketFD, webServerSockAddr)
+			handleErrorExitGoroutine(err)
+			proxy_serverSocketReaderWriter := socketReaderWriter{
+				socketFD:       webServerSocketFD,
+				sendToSockAddr: webServerSockAddr,
+			}
+			clientRequest.Write(&proxy_serverSocketReaderWriter)
+
+			serverResponse, err := http.ReadResponse(bufio.NewReader(&proxy_serverSocketReaderWriter),
+				nil)
+			handleErrorExitGoroutine(err)
+			// strace-ing the program shows that body is in fact(as documented)
+			// is read on demand. There is no recvfrom() syscalls for getting the body
+			// unless we ask for it with io.Readall or response.Write
+
+			//Set keep-alive in the response that will be sent from our proxy
+			serverResponse.Close = false
+			serverResponse.Header.Set("Connection", KEEP_ALIVE)
+
+			var b bytes.Buffer
+			// Response body will be closed by the call to Write
+			serverResponse.Write(&b)
+
+			// https://golang.org/doc/faq#atomic_maps
+			// Go maps can not be read while being modified
+			// Locking only for period of updating the cache
+			// means that parallel requests fot the same uncached URL
+			// will make parallel request to the web server, but will minimise
+			// time when other clients(readers) will be blocked
+			cacheWriteMutex.Lock()
+			cacheMap[*clientRequest.URL] = &cachedResponse{
+				mutex:    sync.RWMutex{},
+				response: b.Bytes(),
+			}
+			cacheWriteMutex.Unlock()
+			fmt.Printf("The key %v was stored in cache\n", clientRequest.URL.Path)
+
+			client_proxySocketReaderWriter.Write(b.Bytes())
 		}
-		clientRequest.Write(&proxy_serverSocketReaderWriter)
-
-		serverResponse, err := http.ReadResponse(bufio.NewReader(&proxy_serverSocketReaderWriter),
-			nil)
-		handleErrorExitGoroutine(err)
-		// strace-ing the program shows that body is in fact(as documented)
-		// is read on demand. There is no recvfrom() syscalls for getting the body
-		// unless we ask for it with io.Readall or response.Write
-
-		var b bytes.Buffer
-		// Response body will be closed by the call to Write
-		serverResponse.Write(&b)
-
-		cacheWriteMutex.Lock()
-		cacheMap[*clientRequest.URL] = &cachedResponse{
-			mutex:    sync.RWMutex{},
-			response: b.Bytes(),
-		}
-		cacheWriteMutex.Unlock()
-		fmt.Printf("The key %v was stored in cache\n", clientRequest.URL.Path)
-
-		client_proxySocketReaderWriter.Write(b.Bytes())
 	}
 
 }
