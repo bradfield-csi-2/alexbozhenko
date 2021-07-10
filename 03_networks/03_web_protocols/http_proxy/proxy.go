@@ -14,7 +14,7 @@ import (
 
 var KEEP_ALIVE = "Keep-Alive"
 
-var proxyListeningSocketBacklogSize = 1000
+var proxyListeningSocketBacklogSize = 100000
 
 type cachedResponse struct {
 	mutex sync.RWMutex
@@ -61,7 +61,7 @@ func handleErrorExitGoroutine(err error) {
 
 func handleClient(proxyListeningSocketFD int, waitGroup *sync.WaitGroup) {
 	defer waitGroup.Done()
-	fmt.Printf("waitGroup: %v\n", waitGroup)
+	fmt.Printf("waitGroup currently has : %v\n", waitGroup)
 
 	client_proxySocketFD, proxy_clientSockAddr, err :=
 		unix.Accept(proxyListeningSocketFD)
@@ -85,9 +85,21 @@ func handleClient(proxyListeningSocketFD int, waitGroup *sync.WaitGroup) {
 	// goroutine, but instead keep looping, trying to
 	// read from the proxy client if klient keep sending data
 	// on the same socket
-	// TODO: but how do we exit?
 	for {
-		fmt.Println("started loop")
+
+		// Checking if client closed the connection
+		// http://stefan.buettcher.org/cs/conn_closed.html
+		// It is not clear to me how to properly check for connection
+		// that is closed by client, so we can exit this goroutine.
+		// This seems to work, but is it the right way?
+		// Also, I had to remove MSG_DONTWAIT flag. This needs further investigation.
+		bytesAvailable, _, err := unix.Recvfrom(client_proxySocketFD,
+			[]byte{0}, unix.MSG_PEEK)
+		handleErrorExitGoroutine(err)
+		if bytesAvailable <= 0 {
+			//handleErrorExitGoroutine(errors.New("closed socket detected!!!!111. Exiting this goroutine"))
+			break
+		}
 
 		clientRequest, err := http.ReadRequest(bufio.NewReader(&client_proxySocketReaderWriter))
 		handleErrorExitGoroutine(err)
@@ -104,9 +116,9 @@ func handleClient(proxyListeningSocketFD int, waitGroup *sync.WaitGroup) {
 			//Set keep-alive in the response that will be sent from our proxy
 			parsedResponse.Close = false
 			parsedResponse.Header.Set("Connection", KEEP_ALIVE)
-			parsedResponse.Write(&client_proxySocketReaderWriter)
+			parsedResponse.Write(&client_proxySocketReaderWriter) // will close the body
 
-			fmt.Printf("The key %v was returned from cache\n", clientRequest.URL.Path)
+			//fmt.Printf("URL %v was retrieved from cache\n", clientRequest.URL.Path)
 			responseFromCache.mutex.RUnlock()
 		} else {
 			webServerSocketFD, err := unix.Socket(unix.AF_INET, unix.SOCK_STREAM, 0)
@@ -131,9 +143,10 @@ func handleClient(proxyListeningSocketFD int, waitGroup *sync.WaitGroup) {
 			serverResponse.Close = false
 			serverResponse.Header.Set("Connection", KEEP_ALIVE)
 
-			var b bytes.Buffer
-			// Response body will be closed by the call to Write
-			serverResponse.Write(&b)
+			// Write response to a buffer, so we can easly store the bite slice
+			// of headers + body in proper wire format
+			var responseBuffer bytes.Buffer
+			serverResponse.Write(&responseBuffer) //will close response's body
 
 			// https://golang.org/doc/faq#atomic_maps
 			// Go maps can not be read while being modified
@@ -144,12 +157,13 @@ func handleClient(proxyListeningSocketFD int, waitGroup *sync.WaitGroup) {
 			cacheWriteMutex.Lock()
 			cacheMap[*clientRequest.URL] = &cachedResponse{
 				mutex:    sync.RWMutex{},
-				response: b.Bytes(),
+				response: responseBuffer.Bytes(),
 			}
 			cacheWriteMutex.Unlock()
-			fmt.Printf("The key %v was stored in cache\n", clientRequest.URL.Path)
+			fmt.Printf("URL %v was stored in cache\n", clientRequest.URL.Path)
 
-			client_proxySocketReaderWriter.Write(b.Bytes())
+			// Once response was cached, return the bytes to the client
+			client_proxySocketReaderWriter.Write(responseBuffer.Bytes())
 		}
 	}
 
@@ -166,7 +180,7 @@ func main() {
 	})
 	handleErrorPanic(err)
 
-	// Let's close the socket using RST, so we do not have to wait for sockets in
+	// Let's close the connection with RST flag, so we do not have to wait for sockets in
 	// TIME_WAIT to expire when the program is closed, and we want to restart
 	// immediately.
 	err = unix.SetsockoptLinger(proxyListeningSocketFD, unix.SOL_SOCKET, unix.SO_LINGER,
