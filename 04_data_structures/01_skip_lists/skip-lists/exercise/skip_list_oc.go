@@ -1,6 +1,12 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"math/rand"
+)
+
+const maxLevel = 16
+const probability = 0.5
 
 type skipListNode struct {
 	item    Item
@@ -41,11 +47,32 @@ func (list skipListOC) String() string {
 	return result
 }
 
+func getLevel() (level int) {
+	for level := 0; level < maxLevel && rand.Float32() < probability; level++ {
+	}
+	return
+}
+
+func (list *skipListOC) findPrevious(key string) *skipListNode {
+	var previousNode *skipListNode
+	topLevel := list.Level() - 1
+	currentNode := list.head[topLevel]
+	for level := topLevel; level >= 0; level-- {
+		for currentNode.forward[level] != nil &&
+			currentNode.item.Key < key {
+			previousNode = currentNode
+			currentNode = currentNode.forward[level]
+		}
+	}
+	return previousNode
+}
+
 func (o *skipListOC) Get(key string) (string, bool) {
 	return "", false
 }
 
 func (o *skipListOC) Put(key, value string) bool {
+
 	return false
 }
 

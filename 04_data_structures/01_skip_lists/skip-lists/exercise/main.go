@@ -125,7 +125,7 @@ func main() {
 		{newBstOC(), "Binary Search Tree"},
 		{newRbTreeOC(), "Red Black Tree"},
 		// TODO: Uncomment this when you're ready!
-		// {newSkipListOC(), "Skip List"},
+		{newSkipListOC(), "Skip List"},
 	} {
 		if len(words) > limit {
 			words = words[:limit]
