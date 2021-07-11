@@ -56,9 +56,9 @@ func getLevel() (level int) {
 func (list *skipListOC) findPrevious(key string) *skipListNode {
 	var previousNode *skipListNode
 	topLevel := list.Level() - 1
-	currentNode := list.head[topLevel]
 	for level := topLevel; level >= 0; level-- {
-		for currentNode.forward[level] != nil &&
+		currentNode := list.head[topLevel]
+		for currentNode != nil &&
 			currentNode.item.Key < key {
 			previousNode = currentNode
 			currentNode = currentNode.forward[level]

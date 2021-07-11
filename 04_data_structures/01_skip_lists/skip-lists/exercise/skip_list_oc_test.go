@@ -19,23 +19,23 @@ var simpleLinkedList = []*skipListNode{
 	aNodeLinkedList,
 }
 
-var cNodeSkipList = skipListNode{
+var cNodeSkipList = &skipListNode{
 	item:    Item{Key: "c", Value: "c_val"},
 	forward: []*skipListNode{nil, nil},
 }
-var bNodeSkipList = skipListNode{
+var bNodeSkipList = &skipListNode{
 	item:    Item{Key: "b", Value: "b_val"},
-	forward: []*skipListNode{&cNodeSkipList},
+	forward: []*skipListNode{cNodeSkipList},
 }
-var aNodeSkipList = skipListNode{
+var aNodeSkipList = &skipListNode{
 	item: Item{Key: "a", Value: "a_val"},
 	forward: []*skipListNode{
-		&bNodeSkipList,
-		&cNodeSkipList,
+		bNodeSkipList,
+		cNodeSkipList,
 		nil,
 	},
 }
-var threeLevelSkipList = []*skipListNode{&aNodeSkipList, &aNodeSkipList, &aNodeSkipList}
+var threeLevelSkipList = []*skipListNode{aNodeSkipList, aNodeSkipList, aNodeSkipList}
 
 func Test_skipListOC_String(t *testing.T) {
 
@@ -128,12 +128,52 @@ func Test_skipListOC_findPrevious(t *testing.T) {
 		{
 			name: "skipList. Item less than first item",
 			fields: fields{
-				head: simpleLinkedList,
+				head: threeLevelSkipList,
 			},
 			args: args{
 				key: "0",
 			},
 			wantNode: nil,
+		},
+		{
+			name: "skipList. First item",
+			fields: fields{
+				head: threeLevelSkipList,
+			},
+			args: args{
+				key: "a",
+			},
+			wantNode: nil,
+		},
+		{
+			name: "skipList. Second item",
+			fields: fields{
+				head: threeLevelSkipList,
+			},
+			args: args{
+				key: "b",
+			},
+			wantNode: aNodeSkipList,
+		},
+		{
+			name: "skipList. Third item",
+			fields: fields{
+				head: threeLevelSkipList,
+			},
+			args: args{
+				key: "c",
+			},
+			wantNode: bNodeSkipList,
+		},
+		{
+			name: "skipList. Item greater than last item",
+			fields: fields{
+				head: threeLevelSkipList,
+			},
+			args: args{
+				key: "d",
+			},
+			wantNode: cNodeSkipList,
 		},
 	}
 	for _, tt := range tests {
