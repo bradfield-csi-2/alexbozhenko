@@ -29,15 +29,14 @@ func newSkipListOC() *skipListOC {
 
 func (list skipListOC) String() string {
 	result := ""
-	for i := 0; i < list.Level(); i++ {
+	for i := (list.Level() - 1); i >= 0; i-- {
 		result += fmt.Sprintf("Level %v:\n", i+1)
 		for currentNode := list.head[i]; currentNode !=
 			nil && i < currentNode.Level(); currentNode = (*currentNode).forward[i] {
 			result += fmt.Sprintf(
-				"%s: %s ->", currentNode.item.Key, currentNode.item.Value)
+				"%s: %s -> ", currentNode.item.Key, currentNode.item.Value)
 		}
-
-		result += "\n"
+		result += "nil\n"
 	}
 	return result
 }
