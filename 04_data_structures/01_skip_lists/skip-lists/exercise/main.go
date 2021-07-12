@@ -17,7 +17,7 @@ const (
 	startKey = "assembly"
 	endKey   = "golang"
 	stride   = 2
-	limit    = 10
+	limit    = 10000
 )
 
 var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to file")

@@ -88,16 +88,27 @@ func getLevelInHumanTerms() (level int) {
 // Never returns an empty slice, since level of empty list = 1
 func (list *skipListOC) findPreviousNodes(key string) []*skipListNode {
 	previousNodes := make([]*skipListNode, list.Level())
+	if list.head[0] == nil {
+		// special case - empty list, just return slice of nil pointers
+		return previousNodes
+	}
 	topLevel := list.Level() - 1
-	saveNode := list.head[topLevel]
+	currentNode := list.head[topLevel]
+	// TODO: this is a shit show. Looks like this function will be much easier
+	// if it will return pointer to node with key >= target key
 	for level := topLevel; level >= 0; level-- {
-		currentNode := saveNode
+		if currentNode == nil {
+			currentNode = list.head[level]
+		}
+		if currentNode != nil && currentNode.item.Key >= key {
+			currentNode = nil
+		}
 		for currentNode != nil &&
-			currentNode.item.Key < key {
-			saveNode = currentNode
+			currentNode.forward[level] != nil &&
+			currentNode.forward[level].item.Key < key {
 			currentNode = currentNode.forward[level]
 		}
-		previousNodes[level] = saveNode
+		previousNodes[level] = currentNode
 	}
 	return previousNodes
 }
@@ -174,7 +185,6 @@ func (skipList *skipListOC) Put(key, value string) bool {
 }
 
 func (skipList *skipListOC) Delete(key string) bool {
-	fmt.Println(*skipList)
 	previousNodes, node := skipList.get(key)
 	if node == nil {
 		return false
