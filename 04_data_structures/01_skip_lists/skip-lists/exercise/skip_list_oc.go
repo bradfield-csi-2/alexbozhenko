@@ -56,6 +56,8 @@ func getLevel() (level int) {
 // Returns slice of pointes to nodes in the skip list,
 // that are less than given node on each level.
 // Ordered from the lowest to the highest level
+// On the lowest level nil is returned when previous node
+// should be located at the head of the list
 func (list *skipListOC) findPreviousNodes(key string) []*skipListNode {
 	previousNodes := make([]*skipListNode, list.Level())
 	topLevel := list.Level() - 1
@@ -70,7 +72,24 @@ func (list *skipListOC) findPreviousNodes(key string) []*skipListNode {
 	return previousNodes
 }
 
-func (o *skipListOC) Get(key string) (string, bool) {
+func (skipList *skipListOC) Get(key string) (string, bool) {
+	previousNodes := skipList.findPreviousNodes(key)
+	previousNode := previousNodes[0]
+	if previousNode == nil {
+		// findPreviousNodes returns nil when previous
+		// node is at the head of the list, so we need to check
+		// if head of the list is the target node
+		headNode := skipList.head[0]
+		if headNode != nil && headNode.item.Key == key {
+			return headNode.item.Value, true
+		}
+
+	} else {
+		nextNode := previousNode.forward[0]
+		if nextNode != nil && nextNode.item.Key == key {
+			return nextNode.item.Value, true
+		}
+	}
 	return "", false
 }
 

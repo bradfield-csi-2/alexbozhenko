@@ -188,3 +188,78 @@ func Test_skipListOC_findPrevious(t *testing.T) {
 		})
 	}
 }
+
+func Test_skipListOC_Get(t *testing.T) {
+	type fields struct {
+		head []*skipListNode
+	}
+	type args struct {
+		key string
+	}
+	tests := []struct {
+		name           string
+		fields         fields
+		args           args
+		wantValue      string
+		wantKeyPresent bool
+	}{
+		{
+			name: "nonexistent key",
+			fields: fields{
+				head: threeLevelSkipList,
+			},
+			args: args{
+				key: "nonexistent",
+			},
+			wantValue:      "",
+			wantKeyPresent: false,
+		},
+		{
+			name: "key at the head",
+			fields: fields{
+				head: threeLevelSkipList,
+			},
+			args: args{
+				key: "a",
+			},
+			wantValue:      "a_val",
+			wantKeyPresent: true,
+		},
+		{
+			name: "key in the middle",
+			fields: fields{
+				head: threeLevelSkipList,
+			},
+			args: args{
+				key: "b",
+			},
+			wantValue:      "b_val",
+			wantKeyPresent: true,
+		},
+		{
+			name: "key at the end",
+			fields: fields{
+				head: threeLevelSkipList,
+			},
+			args: args{
+				key: "c",
+			},
+			wantValue:      "c_val",
+			wantKeyPresent: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			skipList := &skipListOC{
+				head: tt.fields.head,
+			}
+			got, got1 := skipList.Get(tt.args.key)
+			if got != tt.wantValue {
+				t.Errorf("skipListOC.Get() got = %v, want %v", got, tt.wantValue)
+			}
+			if got1 != tt.wantKeyPresent {
+				t.Errorf("skipListOC.Get() got1 = %v, want %v", got1, tt.wantKeyPresent)
+			}
+		})
+	}
+}
