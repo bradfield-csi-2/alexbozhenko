@@ -83,8 +83,8 @@ func getLevelInHumanTerms() (level int) {
 // Returns slice of pointes to nodes in the skip list,
 // that are less than given node on each level.
 // Ordered from the lowest to the highest level
-// On the lowest level nil is returned when previous node
-// should be located at the head of the list
+// Nil is returned when previous node at this Level
+// should be before the head of the list
 // Never returns an empty slice, since level of empty list = 1
 func (list *skipListOC) findPreviousNodes(key string) []*skipListNode {
 	previousNodes := make([]*skipListNode, list.Level())
@@ -93,7 +93,7 @@ func (list *skipListOC) findPreviousNodes(key string) []*skipListNode {
 		return previousNodes
 	}
 	topLevel := list.Level() - 1
-	currentNode := list.head[topLevel]
+	var currentNode *skipListNode
 	// TODO: this is a shit show. Looks like this function will be much easier
 	// if it will return pointer to node with key >= target key
 	for level := topLevel; level >= 0; level-- {

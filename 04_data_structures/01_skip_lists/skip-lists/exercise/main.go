@@ -17,7 +17,7 @@ const (
 	startKey = "assembly"
 	endKey   = "golang"
 	stride   = 2
-	limit    = 10000
+	limit    = 20000
 )
 
 var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to file")
@@ -134,12 +134,13 @@ func main() {
 		o    OC
 		name string
 	}{
+
+		{newSkipListOC(), "Skip List"},
 		{newSliceOC(), "Slice"},
 		{newLinkedOC(), "Linked List"},
 		{newLinkedBlockOC(), "Linked Block"},
 		{newBstOC(), "Binary Search Tree"},
 		{newRbTreeOC(), "Red Black Tree"},
-		{newSkipListOC(), "Skip List"},
 	} {
 		if len(words) > limit {
 			words = words[:limit]
