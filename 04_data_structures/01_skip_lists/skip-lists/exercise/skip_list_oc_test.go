@@ -333,3 +333,34 @@ a: a_val -> b: b_val -> c: c_val -> d: d_val -> e: e_val -> nil
 		})
 	}
 }
+
+func Test_skipListOC_Length(t *testing.T) {
+	tests := []struct {
+		name       string
+		list       *skipListOC
+		wantLength int
+	}{
+		{
+			name:       "0",
+			list:       emptyList,
+			wantLength: 0,
+		},
+		{
+			name:       "2",
+			list:       simpleLinkedList,
+			wantLength: 2,
+		},
+		{
+			name:       "3",
+			list:       threeLevelSkipList,
+			wantLength: 3,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if gotLength := tt.list.Length(); gotLength != tt.wantLength {
+				t.Errorf("skipListOC.Length() = %v, want %v", gotLength, tt.wantLength)
+			}
+		})
+	}
+}

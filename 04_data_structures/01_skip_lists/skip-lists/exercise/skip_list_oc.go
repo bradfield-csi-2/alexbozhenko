@@ -63,6 +63,16 @@ func (list skipListOC) String() string {
 	return result
 }
 
+func (list skipListOC) Length() (length int) {
+	node := list.head[0]
+	length = 0
+	for ; node != nil; length++ {
+		node = node.forward[0]
+	}
+	return length
+
+}
+
 func getLevelInHumanTerms() (level int) {
 	level = 1
 	for ; level < maxLevel && rand.Float32() < probability; level++ {
@@ -80,7 +90,7 @@ func (list *skipListOC) findPreviousNodes(key string) []*skipListNode {
 	previousNodes := make([]*skipListNode, list.Level())
 	topLevel := list.Level() - 1
 	for level := topLevel; level >= 0; level-- {
-		currentNode := list.head[topLevel]
+		currentNode := list.head[level]
 		for currentNode != nil &&
 			currentNode.item.Key < key {
 			previousNodes[level] = currentNode
@@ -161,8 +171,36 @@ func (skipList *skipListOC) Put(key, value string) bool {
 	return true
 }
 
-func (o *skipListOC) Delete(key string) bool {
-	return false
+func (skipList *skipListOC) Delete(key string) bool {
+	previousNodes, node := skipList.get(key)
+	if node == nil {
+		return false
+	}
+	foundNodeLevel := node.Level()
+
+	for currentLevel := 0; currentLevel < foundNodeLevel; currentLevel++ {
+		if previousNodes[currentLevel] == nil {
+			skipList.head[currentLevel] = node.forward[currentLevel]
+		} else {
+			previousNodes[currentLevel].forward[currentLevel] = node.forward[currentLevel]
+		}
+	}
+
+	// If after removing the node header has pointer to nil
+	// that means that the node had the highest level
+	// we need to remove extra levels from the header
+	// by search for nil pointers
+	// But if node was the only element of the list,
+	// we still leave the nil pointer per convention
+	for currentLevel := 1; currentLevel < skipList.Level(); currentLevel++ {
+		if skipList.head[currentLevel] == nil {
+			tmp := make([]*skipListNode, currentLevel+1)
+			copy(tmp, skipList.head)
+			skipList.head = tmp
+			break
+		}
+	}
+	return true
 }
 
 func (o *skipListOC) RangeScan(startKey, endKey string) Iterator {
