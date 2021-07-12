@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"math/rand"
+	"time"
 )
 
 const maxLevel = 16
@@ -40,6 +41,7 @@ func (list skipListOC) Level() int {
 }
 
 func newSkipListOC() *skipListOC {
+	rand.Seed(time.Now().UnixNano())
 	return &skipListOC{
 		head: []*skipListNode{
 			nil,
@@ -61,8 +63,9 @@ func (list skipListOC) String() string {
 	return result
 }
 
-func getLevel() (level int) {
-	for level := 0; level < maxLevel && rand.Float32() < probability; level++ {
+func getLevelInHumanTerms() (level int) {
+	level = 1
+	for ; level < maxLevel && rand.Float32() < probability; level++ {
 	}
 	return
 }
@@ -125,7 +128,7 @@ func (skipList *skipListOC) Put(key, value string) bool {
 		node.item.Value = value
 		return false
 	}
-	newNodeLevel := getLevel()
+	newNodeLevel := getLevelInHumanTerms()
 	node = &skipListNode{
 		item: Item{
 			Key:   key,
@@ -137,12 +140,20 @@ func (skipList *skipListOC) Put(key, value string) bool {
 	// pointers to and from it
 	for currentLevel := 0; currentLevel <
 		min(newNodeLevel, len(previousNodes)); currentLevel++ {
-		node.forward[currentLevel] = previousNodes[currentLevel].forward[currentLevel]
-		previousNodes[currentLevel].forward[currentLevel] = node
+		// we need to update the list header when inserting
+		// the first node on this level
+		if previousNodes[currentLevel] == nil {
+			node.forward[currentLevel] = skipList.head[currentLevel]
+			skipList.head[currentLevel] = node
+		} else {
+			node.forward[currentLevel] = previousNodes[currentLevel].forward[currentLevel]
+			previousNodes[currentLevel].forward[currentLevel] = node
+		}
 	}
 	// if new node level > current skipList.Level() we handle pointers
 	// from header to the node and from node to nil
-	for currentLevel := len(previousNodes); currentLevel <= newNodeLevel; currentLevel++ {
+	for currentLevel := len(previousNodes); currentLevel <
+		newNodeLevel; currentLevel++ {
 		node.forward[currentLevel] = nil
 		skipList.head = append(skipList.head, node)
 	}

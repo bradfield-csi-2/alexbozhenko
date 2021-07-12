@@ -1,6 +1,7 @@
 package main
 
 import (
+	"math/rand"
 	"reflect"
 	"testing"
 )
@@ -248,6 +249,86 @@ func Test_skipListOC_Get(t *testing.T) {
 			}
 			if got1 != tt.wantKeyPresent {
 				t.Errorf("skipListOC.Get() got1 = %v, want %v", got1, tt.wantKeyPresent)
+			}
+		})
+	}
+}
+
+func Test_skipListOC_Put(t *testing.T) {
+	type args struct {
+		key   string
+		value string
+	}
+	tests := []struct {
+		name string
+		list skipListOC
+		args []args
+		want string
+	}{
+		{
+			name: "one element",
+			list: skipListOC{},
+			args: []args{
+				{
+					key:   "a",
+					value: "a_val",
+				},
+			},
+			want: `Level 1:
+a: a_val -> nil
+`,
+		},
+
+		{
+			name: "five elements",
+			list: skipListOC{},
+			args: []args{
+				{
+					key:   "c",
+					value: "c_val",
+				},
+				{
+					key:   "a",
+					value: "a_val",
+				},
+
+				{
+					key:   "e",
+					value: "e_val",
+				},
+				{
+					key:   "b",
+					value: "b_val",
+				},
+				{
+					key:   "d",
+					value: "d_val",
+				},
+			},
+			want: `Level 5:
+d: d_val -> nil
+Level 4:
+d: d_val -> nil
+Level 3:
+b: b_val -> d: d_val -> nil
+Level 2:
+b: b_val -> d: d_val -> nil
+Level 1:
+a: a_val -> b: b_val -> c: c_val -> d: d_val -> e: e_val -> nil
+`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			skipList := newSkipListOC()
+			rand.Seed(1)
+			for _, arg := range tt.args {
+				skipList.Put(arg.key, arg.value)
+
+			}
+
+			if got := skipList.String(); got != tt.want {
+				t.Errorf("skipListOC.String() = %v, want %v", got, tt.want)
 			}
 		})
 	}
