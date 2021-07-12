@@ -134,13 +134,12 @@ func main() {
 		o    OC
 		name string
 	}{
-
-		{newSkipListOC(), "Skip List"},
 		{newSliceOC(), "Slice"},
 		{newLinkedOC(), "Linked List"},
 		{newLinkedBlockOC(), "Linked Block"},
 		{newBstOC(), "Binary Search Tree"},
 		{newRbTreeOC(), "Red Black Tree"},
+		{newSkipListOC(), "Skip List"},
 	} {
 		if len(words) > limit {
 			words = words[:limit]
