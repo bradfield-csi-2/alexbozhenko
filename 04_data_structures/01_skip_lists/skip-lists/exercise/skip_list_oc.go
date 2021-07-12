@@ -8,6 +8,20 @@ import (
 const maxLevel = 16
 const probability = 0.5
 
+func min(a, b int) int {
+	if a > b {
+		return b
+	}
+	return a
+}
+
+// func max(a, b int) int {
+// 	if a > b {
+// 		return a
+// 	}
+// 	return b
+// }
+
 type skipListNode struct {
 	item    Item
 	forward []*skipListNode
@@ -58,6 +72,7 @@ func getLevel() (level int) {
 // Ordered from the lowest to the highest level
 // On the lowest level nil is returned when previous node
 // should be located at the head of the list
+// Never returns an empty slice, since level of empty list = 1
 func (list *skipListOC) findPreviousNodes(key string) []*skipListNode {
 	previousNodes := make([]*skipListNode, list.Level())
 	topLevel := list.Level() - 1
@@ -72,8 +87,10 @@ func (list *skipListOC) findPreviousNodes(key string) []*skipListNode {
 	return previousNodes
 }
 
-func (skipList *skipListOC) Get(key string) (string, bool) {
-	previousNodes := skipList.findPreviousNodes(key)
+func (skipList *skipListOC) get(key string) (previousNodes []*skipListNode,
+	foundNode *skipListNode) {
+	foundNode = nil
+	previousNodes = skipList.findPreviousNodes(key)
 	previousNode := previousNodes[0]
 	if previousNode == nil {
 		// findPreviousNodes returns nil when previous
@@ -81,21 +98,56 @@ func (skipList *skipListOC) Get(key string) (string, bool) {
 		// if head of the list is the target node
 		headNode := skipList.head[0]
 		if headNode != nil && headNode.item.Key == key {
-			return headNode.item.Value, true
+			foundNode = headNode
+			return
 		}
-
 	} else {
 		nextNode := previousNode.forward[0]
 		if nextNode != nil && nextNode.item.Key == key {
-			return nextNode.item.Value, true
+			foundNode = nextNode
+			return
 		}
+	}
+	return
+}
+
+func (skipList *skipListOC) Get(key string) (string, bool) {
+	_, node := skipList.get(key)
+	if node != nil {
+		return node.item.Value, true
 	}
 	return "", false
 }
 
-func (o *skipListOC) Put(key, value string) bool {
+func (skipList *skipListOC) Put(key, value string) bool {
+	previousNodes, node := skipList.get(key)
+	if node != nil {
+		node.item.Value = value
+		return false
+	}
+	newNodeLevel := getLevel()
+	node = &skipListNode{
+		item: Item{
+			Key:   key,
+			Value: value,
+		},
+		forward: make([]*skipListNode, newNodeLevel),
+	}
+	// if new node level <= current skipList.Level() we just update
+	// pointers to and from it
+	for currentLevel := 0; currentLevel <
+		min(newNodeLevel, len(previousNodes)); currentLevel++ {
+		node.forward[currentLevel] = previousNodes[currentLevel].forward[currentLevel]
+		previousNodes[currentLevel].forward[currentLevel] = node
+	}
+	// if new node level > current skipList.Level() we handle pointers
+	// from header to the node and from node to nil
+	for currentLevel := len(previousNodes); currentLevel <= newNodeLevel; currentLevel++ {
+		node.forward[currentLevel] = nil
+		skipList.head = append(skipList.head, node)
+	}
 
-	return false
+	return true
 }
 
 func (o *skipListOC) Delete(key string) bool {
