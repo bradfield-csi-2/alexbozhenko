@@ -203,24 +203,42 @@ func (skipList *skipListOC) Delete(key string) bool {
 	return true
 }
 
-func (o *skipListOC) RangeScan(startKey, endKey string) Iterator {
-	return &skipListOCIterator{}
+func (skipList *skipListOC) RangeScan(startKey, endKey string) Iterator {
+	previousNodes, startNode := skipList.get(startKey)
+	var currentNode *skipListNode
+	if startNode == nil && previousNodes[0] == nil {
+		currentNode = skipList.head[0]
+	} else if previousNodes[0] != nil {
+		currentNode = previousNodes[0].forward[0]
+	} else {
+		currentNode = startNode
+	}
+	return &skipListOCIterator{
+		skipList:    skipList,
+		currentNode: currentNode,
+		startKey:    startKey,
+		endKey:      endKey,
+	}
 }
 
 type skipListOCIterator struct {
+	skipList         *skipListOC
+	currentNode      *skipListNode
+	startKey, endKey string
 }
 
 func (iter *skipListOCIterator) Next() {
+	iter.currentNode = iter.currentNode.forward[0]
 }
 
 func (iter *skipListOCIterator) Valid() bool {
-	return false
+	return iter.currentNode != nil && iter.currentNode.item.Key < iter.endKey
 }
 
 func (iter *skipListOCIterator) Key() string {
-	return ""
+	return iter.currentNode.item.Key
 }
 
 func (iter *skipListOCIterator) Value() string {
-	return ""
+	return iter.currentNode.item.Value
 }

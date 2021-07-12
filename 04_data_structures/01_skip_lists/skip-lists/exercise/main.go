@@ -14,8 +14,8 @@ const (
 	pattern  = "random"
 	startKey = "assembly"
 	endKey   = "golang"
-	stride   = 2
-	limit    = 10000
+	stride   = 3
+	limit    = 210000
 )
 
 func loadWords(limit int) ([]string, error) {
@@ -119,12 +119,12 @@ func main() {
 		o    OC
 		name string
 	}{
-		{newSkipListOC(), "Skip List"},
 		{newSliceOC(), "Slice"},
 		{newLinkedOC(), "Linked List"},
 		{newLinkedBlockOC(), "Linked Block"},
 		{newBstOC(), "Binary Search Tree"},
 		{newRbTreeOC(), "Red Black Tree"},
+		{newSkipListOC(), "Skip List"},
 	} {
 		if len(words) > limit {
 			words = words[:limit]
