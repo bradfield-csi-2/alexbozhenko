@@ -90,10 +90,10 @@ func Test_skipListOC_findPrevious(t *testing.T) {
 		key string
 	}
 	tests := []struct {
-		name     string
-		fields   fields
-		args     args
-		wantNode *skipListNode
+		name      string
+		fields    fields
+		args      args
+		wantNodes []*skipListNode
 	}{
 		{
 			name: "linked list first item",
@@ -103,7 +103,7 @@ func Test_skipListOC_findPrevious(t *testing.T) {
 			args: args{
 				key: "a",
 			},
-			wantNode: nil,
+			wantNodes: []*skipListNode{nil},
 		},
 		{
 			name: "linked list second item",
@@ -113,7 +113,7 @@ func Test_skipListOC_findPrevious(t *testing.T) {
 			args: args{
 				key: "b",
 			},
-			wantNode: aNodeLinkedList,
+			wantNodes: []*skipListNode{aNodeLinkedList},
 		},
 		{
 			name: "linked list nonexistent item",
@@ -123,7 +123,7 @@ func Test_skipListOC_findPrevious(t *testing.T) {
 			args: args{
 				key: "nonexistent",
 			},
-			wantNode: bNodeLinkedList,
+			wantNodes: []*skipListNode{bNodeLinkedList},
 		},
 		{
 			name: "skipList. Item less than first item",
@@ -133,7 +133,7 @@ func Test_skipListOC_findPrevious(t *testing.T) {
 			args: args{
 				key: "0",
 			},
-			wantNode: nil,
+			wantNodes: []*skipListNode{nil, nil, nil},
 		},
 		{
 			name: "skipList. First item",
@@ -143,7 +143,7 @@ func Test_skipListOC_findPrevious(t *testing.T) {
 			args: args{
 				key: "a",
 			},
-			wantNode: nil,
+			wantNodes: []*skipListNode{nil, nil, nil},
 		},
 		{
 			name: "skipList. Second item",
@@ -153,7 +153,7 @@ func Test_skipListOC_findPrevious(t *testing.T) {
 			args: args{
 				key: "b",
 			},
-			wantNode: aNodeSkipList,
+			wantNodes: []*skipListNode{aNodeSkipList, aNodeSkipList, aNodeSkipList},
 		},
 		{
 			name: "skipList. Third item",
@@ -163,7 +163,7 @@ func Test_skipListOC_findPrevious(t *testing.T) {
 			args: args{
 				key: "c",
 			},
-			wantNode: bNodeSkipList,
+			wantNodes: []*skipListNode{bNodeSkipList, aNodeSkipList, aNodeSkipList},
 		},
 		{
 			name: "skipList. Item greater than last item",
@@ -173,7 +173,8 @@ func Test_skipListOC_findPrevious(t *testing.T) {
 			args: args{
 				key: "d",
 			},
-			wantNode: cNodeSkipList,
+
+			wantNodes: []*skipListNode{cNodeSkipList, cNodeSkipList, aNodeSkipList},
 		},
 	}
 	for _, tt := range tests {
@@ -181,8 +182,8 @@ func Test_skipListOC_findPrevious(t *testing.T) {
 			list := &skipListOC{
 				head: tt.fields.head,
 			}
-			if gotNode := list.findPrevious(tt.args.key); !reflect.DeepEqual(gotNode, tt.wantNode) {
-				t.Errorf("skipListOC.findPrevious() = %v, want %v", gotNode, tt.wantNode)
+			if gotNode := list.findPreviousNodes(tt.args.key); !reflect.DeepEqual(gotNode, tt.wantNodes) {
+				t.Errorf("skipListOC.findPrevious() = %v, want %v", gotNode, tt.wantNodes)
 			}
 		})
 	}
