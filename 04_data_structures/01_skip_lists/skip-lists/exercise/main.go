@@ -2,10 +2,12 @@ package main
 
 import (
 	"bufio"
+	"flag"
 	"fmt"
 	"log"
 	"math/rand"
 	"os"
+	"runtime/pprof"
 	"time"
 )
 
@@ -14,9 +16,12 @@ const (
 	pattern  = "random"
 	startKey = "assembly"
 	endKey   = "golang"
-	stride   = 3
-	limit    = 210000
+	stride   = 2
+	limit    = 10
 )
+
+var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to file")
+var memprofile = flag.String("memprofile", "", "write memory profile to file")
 
 func loadWords(limit int) ([]string, error) {
 	f, err := os.Open(path)
@@ -104,6 +109,16 @@ func main() {
 		log.Fatal(err)
 	}
 
+	flag.Parse()
+	if *cpuprofile != "" {
+		f, err := os.Create(*cpuprofile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		pprof.StartCPUProfile(f)
+		defer pprof.StopCPUProfile()
+	}
+
 	// Set pattern to "sequential" to destroy the performance of the
 	// (unbalanced) binary search tree.
 	if pattern == "random" {
@@ -130,5 +145,13 @@ func main() {
 			words = words[:limit]
 		}
 		runTest(words, testCase.o, testCase.name)
+	}
+	if *memprofile != "" {
+		f, err := os.Create(*memprofile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		pprof.WriteHeapProfile(f)
+		defer f.Close()
 	}
 }

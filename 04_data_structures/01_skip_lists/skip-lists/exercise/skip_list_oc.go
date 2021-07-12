@@ -89,13 +89,15 @@ func getLevelInHumanTerms() (level int) {
 func (list *skipListOC) findPreviousNodes(key string) []*skipListNode {
 	previousNodes := make([]*skipListNode, list.Level())
 	topLevel := list.Level() - 1
+	saveNode := list.head[topLevel]
 	for level := topLevel; level >= 0; level-- {
-		currentNode := list.head[level]
+		currentNode := saveNode
 		for currentNode != nil &&
 			currentNode.item.Key < key {
-			previousNodes[level] = currentNode
+			saveNode = currentNode
 			currentNode = currentNode.forward[level]
 		}
+		previousNodes[level] = saveNode
 	}
 	return previousNodes
 }
@@ -172,6 +174,7 @@ func (skipList *skipListOC) Put(key, value string) bool {
 }
 
 func (skipList *skipListOC) Delete(key string) bool {
+	fmt.Println(*skipList)
 	previousNodes, node := skipList.get(key)
 	if node == nil {
 		return false
