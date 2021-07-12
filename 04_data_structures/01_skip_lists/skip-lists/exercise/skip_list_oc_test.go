@@ -5,6 +5,8 @@ import (
 	"testing"
 )
 
+var emptyList = newSkipListOC()
+
 var bNodeLinkedList = &skipListNode{
 	item:    Item{Key: "b", Value: "b_val"},
 	forward: []*skipListNode{nil},
@@ -15,8 +17,10 @@ var aNodeLinkedList = &skipListNode{
 	forward: []*skipListNode{bNodeLinkedList},
 }
 
-var simpleLinkedList = []*skipListNode{
-	aNodeLinkedList,
+var simpleLinkedList = &skipListOC{
+	head: []*skipListNode{
+		aNodeLinkedList,
+	},
 }
 
 var cNodeSkipList = &skipListNode{
@@ -35,32 +39,35 @@ var aNodeSkipList = &skipListNode{
 		nil,
 	},
 }
-var threeLevelSkipList = []*skipListNode{aNodeSkipList, aNodeSkipList, aNodeSkipList}
+var threeLevelSkipList = &skipListOC{
+	head: []*skipListNode{aNodeSkipList, aNodeSkipList, aNodeSkipList},
+}
 
 func Test_skipListOC_String(t *testing.T) {
 
-	type fields struct {
-		head []*skipListNode
-	}
 	tests := []struct {
-		name   string
-		fields fields
-		want   string
+		name string
+		list *skipListOC
+		want string
 	}{
 		{
+			name: "Empty linked list",
+			list: emptyList,
+			want: `Level 1:
+nil
+`,
+		},
+
+		{
 			name: "Simple linked list",
-			fields: fields{
-				head: simpleLinkedList,
-			},
+			list: simpleLinkedList,
 			want: `Level 1:
 a: a_val -> b: b_val -> nil
 `,
 		},
 		{
 			name: "Three level skip list",
-			fields: fields{
-				head: threeLevelSkipList,
-			},
+			list: threeLevelSkipList,
 			want: `Level 3:
 a: a_val -> nil
 Level 2:
@@ -72,9 +79,7 @@ a: a_val -> b: b_val -> c: c_val -> nil
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			list := skipListOC{
-				head: tt.fields.head,
-			}
+			list := tt.list
 			if got := list.String(); got != tt.want {
 				t.Errorf("skipListOC.String() = %v, want %v", got, tt.want)
 			}
@@ -83,23 +88,27 @@ a: a_val -> b: b_val -> c: c_val -> nil
 }
 
 func Test_skipListOC_findPrevious(t *testing.T) {
-	type fields struct {
-		head []*skipListNode
-	}
 	type args struct {
 		key string
 	}
 	tests := []struct {
 		name      string
-		fields    fields
+		list      *skipListOC
 		args      args
 		wantNodes []*skipListNode
 	}{
+
+		{
+			name: "Emtpy list",
+			list: emptyList,
+			args: args{
+				key: "whatever",
+			},
+			wantNodes: []*skipListNode{nil},
+		},
 		{
 			name: "linked list first item",
-			fields: fields{
-				head: simpleLinkedList,
-			},
+			list: simpleLinkedList,
 			args: args{
 				key: "a",
 			},
@@ -107,9 +116,7 @@ func Test_skipListOC_findPrevious(t *testing.T) {
 		},
 		{
 			name: "linked list second item",
-			fields: fields{
-				head: simpleLinkedList,
-			},
+			list: simpleLinkedList,
 			args: args{
 				key: "b",
 			},
@@ -117,9 +124,7 @@ func Test_skipListOC_findPrevious(t *testing.T) {
 		},
 		{
 			name: "linked list nonexistent item",
-			fields: fields{
-				head: simpleLinkedList,
-			},
+			list: simpleLinkedList,
 			args: args{
 				key: "nonexistent",
 			},
@@ -127,9 +132,7 @@ func Test_skipListOC_findPrevious(t *testing.T) {
 		},
 		{
 			name: "skipList. Item less than first item",
-			fields: fields{
-				head: threeLevelSkipList,
-			},
+			list: threeLevelSkipList,
 			args: args{
 				key: "0",
 			},
@@ -137,9 +140,7 @@ func Test_skipListOC_findPrevious(t *testing.T) {
 		},
 		{
 			name: "skipList. First item",
-			fields: fields{
-				head: threeLevelSkipList,
-			},
+			list: threeLevelSkipList,
 			args: args{
 				key: "a",
 			},
@@ -147,9 +148,7 @@ func Test_skipListOC_findPrevious(t *testing.T) {
 		},
 		{
 			name: "skipList. Second item",
-			fields: fields{
-				head: threeLevelSkipList,
-			},
+			list: threeLevelSkipList,
 			args: args{
 				key: "b",
 			},
@@ -157,9 +156,7 @@ func Test_skipListOC_findPrevious(t *testing.T) {
 		},
 		{
 			name: "skipList. Third item",
-			fields: fields{
-				head: threeLevelSkipList,
-			},
+			list: threeLevelSkipList,
 			args: args{
 				key: "c",
 			},
@@ -167,9 +164,7 @@ func Test_skipListOC_findPrevious(t *testing.T) {
 		},
 		{
 			name: "skipList. Item greater than last item",
-			fields: fields{
-				head: threeLevelSkipList,
-			},
+			list: threeLevelSkipList,
 			args: args{
 				key: "d",
 			},
@@ -179,9 +174,7 @@ func Test_skipListOC_findPrevious(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			list := &skipListOC{
-				head: tt.fields.head,
-			}
+			list := tt.list
 			if gotNode := list.findPreviousNodes(tt.args.key); !reflect.DeepEqual(gotNode, tt.wantNodes) {
 				t.Errorf("skipListOC.findPrevious() = %v, want %v", gotNode, tt.wantNodes)
 			}
@@ -190,24 +183,28 @@ func Test_skipListOC_findPrevious(t *testing.T) {
 }
 
 func Test_skipListOC_Get(t *testing.T) {
-	type fields struct {
-		head []*skipListNode
-	}
 	type args struct {
 		key string
 	}
 	tests := []struct {
 		name           string
-		fields         fields
+		list           *skipListOC
 		args           args
 		wantValue      string
 		wantKeyPresent bool
 	}{
 		{
-			name: "nonexistent key",
-			fields: fields{
-				head: threeLevelSkipList,
+			name: "empty list",
+			list: emptyList,
+			args: args{
+				key: "whatever",
 			},
+			wantValue:      "",
+			wantKeyPresent: false,
+		},
+		{
+			name: "nonexistent key",
+			list: threeLevelSkipList,
 			args: args{
 				key: "nonexistent",
 			},
@@ -216,9 +213,7 @@ func Test_skipListOC_Get(t *testing.T) {
 		},
 		{
 			name: "key at the head",
-			fields: fields{
-				head: threeLevelSkipList,
-			},
+			list: threeLevelSkipList,
 			args: args{
 				key: "a",
 			},
@@ -227,9 +222,7 @@ func Test_skipListOC_Get(t *testing.T) {
 		},
 		{
 			name: "key in the middle",
-			fields: fields{
-				head: threeLevelSkipList,
-			},
+			list: threeLevelSkipList,
 			args: args{
 				key: "b",
 			},
@@ -238,9 +231,7 @@ func Test_skipListOC_Get(t *testing.T) {
 		},
 		{
 			name: "key at the end",
-			fields: fields{
-				head: threeLevelSkipList,
-			},
+			list: threeLevelSkipList,
 			args: args{
 				key: "c",
 			},
@@ -250,10 +241,8 @@ func Test_skipListOC_Get(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			skipList := &skipListOC{
-				head: tt.fields.head,
-			}
-			got, got1 := skipList.Get(tt.args.key)
+			list := tt.list
+			got, got1 := list.Get(tt.args.key)
 			if got != tt.wantValue {
 				t.Errorf("skipListOC.Get() got = %v, want %v", got, tt.wantValue)
 			}
