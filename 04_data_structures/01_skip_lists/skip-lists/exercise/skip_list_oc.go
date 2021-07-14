@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"math/rand"
-	"time"
 )
 
 const maxLevel = 16
@@ -25,19 +24,22 @@ func (node skipListNode) Level() int {
 	return len(node.forward)
 }
 
+// head is a dummy node with nil item, that is used to
+// simplify handiling edge cases. Head never contains an item
 type skipListOC struct {
-	head []*skipListNode
+	head *skipListNode
 }
 
 func (list skipListOC) Level() int {
-	return len(list.head)
+	return len(list.head.forward)
 }
 
 func newSkipListOC() *skipListOC {
-	rand.Seed(time.Now().UnixNano())
+	//	rand.Seed(time.Now().UnixNano())
 	return &skipListOC{
-		head: []*skipListNode{
-			nil,
+		head: &skipListNode{
+			// item is nil
+			forward: []*skipListNode{nil},
 		},
 	}
 }
@@ -46,7 +48,7 @@ func (list skipListOC) String() string {
 	result := ""
 	for i := (list.Level() - 1); i >= 0; i-- {
 		result += fmt.Sprintf("Level %v:\n", i+1)
-		for currentNode := list.head[i]; currentNode !=
+		for currentNode := list.head.forward[i]; currentNode !=
 			nil && i < currentNode.Level(); currentNode = (*currentNode).forward[i] {
 			result += fmt.Sprintf(
 				"%s: %s -> ", currentNode.item.Key, currentNode.item.Value)
@@ -57,7 +59,7 @@ func (list skipListOC) String() string {
 }
 
 func (list skipListOC) Length() (length int) {
-	node := list.head[0]
+	node := list.head.forward[0]
 	length = 0
 	for ; node != nil; length++ {
 		node = node.forward[0]
@@ -76,26 +78,14 @@ func getLevelInHumanTerms() (level int) {
 // Returns slice of pointes to nodes in the skip list,
 // that are less than given node on each level.
 // Ordered from the lowest to the highest level
-// Nil is returned when previous node at this Level
-// should be before the head of the list
+// dummy head node is returned when "previous" node at this Level
+// should be the first in the list
 // Never returns an empty slice, since level of empty list = 1
 func (list *skipListOC) findPreviousNodes(key string) []*skipListNode {
 	previousNodes := make([]*skipListNode, list.Level())
-	if list.head[0] == nil {
-		// special case - empty list, just return slice of nil pointers
-		return previousNodes
-	}
 	topLevel := list.Level() - 1
-	var currentNode *skipListNode
-	// TODO: this is a shit show. Looks like this function will be much easier
-	// if it will return pointer to node with key >= target key
+	currentNode := list.head
 	for level := topLevel; level >= 0; level-- {
-		if currentNode == nil {
-			currentNode = list.head[level]
-		}
-		if currentNode != nil && currentNode.item.Key >= key {
-			currentNode = nil
-		}
 		for currentNode != nil &&
 			currentNode.forward[level] != nil &&
 			currentNode.forward[level].item.Key < key {
@@ -106,26 +96,16 @@ func (list *skipListOC) findPreviousNodes(key string) []*skipListNode {
 	return previousNodes
 }
 
+// Return previous nodes, and nil for node, if node was not found in the list
 func (skipList *skipListOC) get(key string) (previousNodes []*skipListNode,
 	foundNode *skipListNode) {
 	foundNode = nil
 	previousNodes = skipList.findPreviousNodes(key)
 	previousNode := previousNodes[0]
-	if previousNode == nil {
-		// findPreviousNodes returns nil when previous
-		// node is at the head of the list, so we need to check
-		// if head of the list is the target node
-		headNode := skipList.head[0]
-		if headNode != nil && headNode.item.Key == key {
-			foundNode = headNode
-			return
-		}
-	} else {
-		nextNode := previousNode.forward[0]
-		if nextNode != nil && nextNode.item.Key == key {
-			foundNode = nextNode
-			return
-		}
+	nextNode := previousNode.forward[0]
+	if nextNode != nil && nextNode.item.Key == key {
+		foundNode = nextNode
+		return
 	}
 	return
 }
@@ -156,22 +136,15 @@ func (skipList *skipListOC) Put(key, value string) bool {
 	// pointers to and from it
 	for currentLevel := 0; currentLevel <
 		min(newNodeLevel, len(previousNodes)); currentLevel++ {
-		// we need to update the list header when inserting
-		// the first node on this level
-		if previousNodes[currentLevel] == nil {
-			node.forward[currentLevel] = skipList.head[currentLevel]
-			skipList.head[currentLevel] = node
-		} else {
-			node.forward[currentLevel] = previousNodes[currentLevel].forward[currentLevel]
-			previousNodes[currentLevel].forward[currentLevel] = node
-		}
+		node.forward[currentLevel] = previousNodes[currentLevel].forward[currentLevel]
+		previousNodes[currentLevel].forward[currentLevel] = node
 	}
 	// if new node level > current skipList.Level() we handle pointers
 	// from header to the node and from node to nil
 	for currentLevel := len(previousNodes); currentLevel <
 		newNodeLevel; currentLevel++ {
 		node.forward[currentLevel] = nil
-		skipList.head = append(skipList.head, node)
+		skipList.head.forward = append(skipList.head.forward, node)
 	}
 
 	return true
@@ -185,24 +158,20 @@ func (skipList *skipListOC) Delete(key string) bool {
 	foundNodeLevel := node.Level()
 
 	for currentLevel := 0; currentLevel < foundNodeLevel; currentLevel++ {
-		if previousNodes[currentLevel] == nil {
-			skipList.head[currentLevel] = node.forward[currentLevel]
-		} else {
-			previousNodes[currentLevel].forward[currentLevel] = node.forward[currentLevel]
-		}
+		previousNodes[currentLevel].forward[currentLevel] = node.forward[currentLevel]
 	}
 
-	// If after removing the node header has pointer to nil
-	// that means that the node had the highest level
+	// When after removing the node, header has pointer to nil,
+	// that means that the deleted node had the highest level
 	// we need to remove extra levels from the header
 	// by search for nil pointers
 	// But if node was the only element of the list,
 	// we still leave the nil pointer per convention
 	for currentLevel := 1; currentLevel < skipList.Level(); currentLevel++ {
-		if skipList.head[currentLevel] == nil {
+		if skipList.head.forward[currentLevel] == nil {
 			tmp := make([]*skipListNode, currentLevel+1)
-			copy(tmp, skipList.head)
-			skipList.head = tmp
+			copy(tmp, skipList.head.forward)
+			skipList.head.forward = tmp
 			break
 		}
 	}
@@ -212,12 +181,12 @@ func (skipList *skipListOC) Delete(key string) bool {
 func (skipList *skipListOC) RangeScan(startKey, endKey string) Iterator {
 	previousNodes, startNode := skipList.get(startKey)
 	var currentNode *skipListNode
-	if startNode == nil && previousNodes[0] == nil {
-		currentNode = skipList.head[0]
-	} else if previousNodes[0] != nil {
-		currentNode = previousNodes[0].forward[0]
-	} else {
+	if startNode != nil {
+		// when node was found, start from it
 		currentNode = startNode
+	} else {
+		// When node was not found in the list, start from the first greater element
+		currentNode = previousNodes[0].forward[0]
 	}
 	return &skipListOCIterator{
 		skipList:    skipList,

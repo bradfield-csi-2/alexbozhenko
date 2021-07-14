@@ -19,8 +19,8 @@ var aNodeLinkedList = &skipListNode{
 }
 
 var simpleLinkedList = &skipListOC{
-	head: []*skipListNode{
-		aNodeLinkedList,
+	head: &skipListNode{
+		forward: []*skipListNode{aNodeLinkedList},
 	},
 }
 
@@ -39,7 +39,9 @@ var aNodeTwoLevelSkipList = &skipListNode{
 	},
 }
 var twoLevelSkipList = &skipListOC{
-	head: []*skipListNode{aNodeTwoLevelSkipList, bNodeTwoLevelSkipList},
+	head: &skipListNode{
+		forward: []*skipListNode{aNodeTwoLevelSkipList, bNodeTwoLevelSkipList},
+	},
 }
 
 var cNodeThreeLelvelSkipList = &skipListNode{
@@ -58,8 +60,11 @@ var aNodeThreeLevelSkipList = &skipListNode{
 		nil,
 	},
 }
+
 var threeLevelSkipList = &skipListOC{
-	head: []*skipListNode{aNodeThreeLevelSkipList, aNodeThreeLevelSkipList, aNodeThreeLevelSkipList},
+	head: &skipListNode{
+		forward: []*skipListNode{aNodeThreeLevelSkipList, aNodeThreeLevelSkipList, aNodeThreeLevelSkipList},
+	},
 }
 
 func Test_skipListOC_String(t *testing.T) {
@@ -132,7 +137,7 @@ func Test_skipListOC_findPrevious(t *testing.T) {
 			args: args{
 				key: "whatever",
 			},
-			wantNodes: []*skipListNode{nil},
+			wantNodes: []*skipListNode{emptyList.head},
 		},
 		{
 			name: "linked list first item",
@@ -140,7 +145,7 @@ func Test_skipListOC_findPrevious(t *testing.T) {
 			args: args{
 				key: "a",
 			},
-			wantNodes: []*skipListNode{nil},
+			wantNodes: []*skipListNode{simpleLinkedList.head},
 		},
 		{
 			name: "linked list second item",
@@ -164,7 +169,7 @@ func Test_skipListOC_findPrevious(t *testing.T) {
 			args: args{
 				key: "b",
 			},
-			wantNodes: []*skipListNode{aNodeTwoLevelSkipList, nil},
+			wantNodes: []*skipListNode{aNodeTwoLevelSkipList, twoLevelSkipList.head},
 		},
 
 		{
@@ -173,7 +178,9 @@ func Test_skipListOC_findPrevious(t *testing.T) {
 			args: args{
 				key: "0",
 			},
-			wantNodes: []*skipListNode{nil, nil, nil},
+			wantNodes: []*skipListNode{threeLevelSkipList.head,
+				threeLevelSkipList.head,
+				threeLevelSkipList.head},
 		},
 		{
 			name: "skipList. First item",
@@ -181,7 +188,9 @@ func Test_skipListOC_findPrevious(t *testing.T) {
 			args: args{
 				key: "a",
 			},
-			wantNodes: []*skipListNode{nil, nil, nil},
+			wantNodes: []*skipListNode{threeLevelSkipList.head,
+				threeLevelSkipList.head,
+				threeLevelSkipList.head},
 		},
 		{
 			name: "skipList. Second item",
