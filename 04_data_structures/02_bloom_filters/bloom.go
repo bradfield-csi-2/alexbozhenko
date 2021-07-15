@@ -20,7 +20,7 @@ import (
 // https://www.wolframalpha.com/input/?i=n+%3D+123115%3B+m+%3D+800000%3B+k%3D2%3B+%281-2.7%5E%28-k*n%2Fm%29%29%5Ek
 
 const memoryUsageInBits = 800_000
-const numberOfHashFunctions = 3
+const numberOfHashFunctions = 9
 const bitsInBucket = 64
 
 var bitPositions = make([]uint64, numberOfHashFunctions)
