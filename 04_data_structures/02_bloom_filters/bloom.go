@@ -22,6 +22,8 @@ const memoryUsageInBits = 800_000
 const numberOfHashFunctions = 2
 const bitsInBucket = 64
 
+var bitPositions = make([]uint, numberOfHashFunctions)
+
 type bloomFilter interface {
 	add(item string)
 
@@ -63,7 +65,6 @@ func getBitPositions(item string) []uint {
 	fnvSum := fnvHash.Sum64()
 	fnvSum1 := fnvSum & 0xffffffff
 	fnvSum2 := fnvSum >> 32
-	bitPositions := make([]uint, numberOfHashFunctions)
 	for i := 0; i < numberOfHashFunctions; i++ {
 		bitPositions[i] = uint((fnvSum1 + fnvSum2*uint64(i)) % memoryUsageInBits)
 	}
