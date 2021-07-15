@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"math/rand"
+	"time"
 )
 
 const maxLevel = 16
@@ -35,7 +36,7 @@ func (list skipListOC) Level() int {
 }
 
 func newSkipListOC() *skipListOC {
-	//	rand.Seed(time.Now().UnixNano())
+	rand.Seed(time.Now().UnixNano())
 	return &skipListOC{
 		head: &skipListNode{
 			// item is nil
