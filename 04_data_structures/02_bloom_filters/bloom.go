@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"math"
+	"unsafe"
 )
 
 // ...We will refer to a Bloom filter with
@@ -19,10 +20,10 @@ import (
 // https://www.wolframalpha.com/input/?i=n+%3D+123115%3B+m+%3D+800000%3B+k%3D2%3B+%281-2.7%5E%28-k*n%2Fm%29%29%5Ek
 
 const memoryUsageInBits = 800_000
-const numberOfHashFunctions = 2
+const numberOfHashFunctions = 3
 const bitsInBucket = 64
 
-var bitPositions = make([]uint, numberOfHashFunctions)
+var bitPositions = make([]uint64, numberOfHashFunctions)
 
 type bloomFilter interface {
 	add(item string)
@@ -59,14 +60,27 @@ func (bloomFilter *myBloomFilter) String() string {
 // Produce multiple hash functions using the trick described in
 // http://willwhim.wpengine.com/2011/09/03/producing-n-hash-functions-by-hashing-only-once/
 // hash(i) = (a + b * i ) % m
-func getBitPositions(item string) []uint {
+func getBitPositions(item string) []uint64 {
 	fnvHash := fnv.New64()
-	fnvHash.Write([]byte(item))
+
+	// The hack below was copied from the solution:
+	// next time I should be smart enough to come up with it myself:)
+	// since I saw in pprof that stringtobyteslice takes 27% of total cpu time
+
+	// The basic way to convert `item` into a byte array is as follows:
+	//
+	//     bytes := []byte(item)
+	//
+	// However, this `unsafe.Pointer` hack lets us avoid copying data and
+	// get a slight speed-up by directly referencing the underlying bytes
+	// of `item`.
+
+	fnvHash.Write(*(*[]byte)(unsafe.Pointer(&item)))
 	fnvSum := fnvHash.Sum64()
 	fnvSum1 := fnvSum & 0xffffffff
 	fnvSum2 := fnvSum >> 32
-	for i := 0; i < numberOfHashFunctions; i++ {
-		bitPositions[i] = uint((fnvSum1 + fnvSum2*uint64(i)) % memoryUsageInBits)
+	for i := uint64(0); i < numberOfHashFunctions; i++ {
+		bitPositions[i] = (fnvSum1 + fnvSum2*i) % memoryUsageInBits
 	}
 	return bitPositions
 }
