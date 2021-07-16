@@ -23,7 +23,7 @@ const memoryUsageInBits = 800_000
 const numberOfHashFunctions = 9
 const bitsInBucket = 64
 
-var bitPositions = make([]uint64, numberOfHashFunctions)
+//var bitPositions = make([]uint64, numberOfHashFunctions)
 
 type bloomFilter interface {
 	add(item string)
@@ -60,7 +60,7 @@ func (bloomFilter *myBloomFilter) String() string {
 // Produce multiple hash functions using the trick described in
 // http://willwhim.wpengine.com/2011/09/03/producing-n-hash-functions-by-hashing-only-once/
 // hash(i) = (a + b * i ) % m
-func getBitPositions(item string) []uint64 {
+func getBitPositions(item string) func() (bitPosition uint64, hasNext bool) {
 	fnvHash := fnv.New64()
 
 	// The hack below was copied from the solution:
@@ -79,30 +79,42 @@ func getBitPositions(item string) []uint64 {
 	fnvSum := fnvHash.Sum64()
 	fnvSum1 := fnvSum & 0xffffffff
 	fnvSum2 := fnvSum >> 32
-	for i := uint64(0); i < numberOfHashFunctions; i++ {
-		bitPositions[i] = (fnvSum1 + fnvSum2*i) % memoryUsageInBits
+	var i uint64 = 0
+	return func() (bitPosition uint64, hasNext bool) {
+		if i < numberOfHashFunctions {
+			bitPosition = (fnvSum1 + fnvSum2*i) % memoryUsageInBits
+			i++
+			return bitPosition, true
+		} else {
+			return 0, false
+		}
 	}
-	return bitPositions
 }
 
 func (b *myBloomFilter) add(item string) {
 	bitPositions := getBitPositions(item)
-	for _, bitPosition := range bitPositions {
+	for bitPosition, hasNext := bitPositions(); hasNext; {
 		bucketNumber := bitPosition / bitsInBucket
 		bitNumberInBucket := (bitsInBucket - 1) - (bitPosition % bitsInBucket)
 		b.data[bucketNumber] |= (1 << bitNumberInBucket)
+		bitPosition, hasNext = bitPositions()
 	}
+	bitPositions = nil // for GC
 }
 
 func (b *myBloomFilter) maybeContains(item string) bool {
 	bitPositions := getBitPositions(item)
-	for _, bitPosition := range bitPositions {
+	for bitPosition, hasNext := bitPositions(); hasNext; {
 		bucketNumber := bitPosition / bitsInBucket
 		bitNumberInBucket := (bitsInBucket - 1) - (bitPosition % bitsInBucket)
 		if (b.data[bucketNumber] & (1 << bitNumberInBucket)) == 0 {
+
+			bitPositions = nil // for GC
 			return false
 		}
+		bitPosition, hasNext = bitPositions()
 	}
+	bitPositions = nil // for GC
 	return true
 }
 

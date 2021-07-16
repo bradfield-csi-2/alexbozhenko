@@ -59,7 +59,7 @@ func main() {
 	falsePositives := 0
 	numChecked := 0
 
-	for tmp := 0; tmp < 1; tmp++ {
+	for numOfIterations := 0; numOfIterations < 1; numOfIterations++ {
 		// Add every other word (even indices)
 		for i := 0; i < len(words); i += 2 {
 			b.add(words[i])
