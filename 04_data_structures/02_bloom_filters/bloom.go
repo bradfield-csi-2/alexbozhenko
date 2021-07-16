@@ -57,10 +57,13 @@ func (bloomFilter *myBloomFilter) String() string {
 	return res
 }
 
-// Produce multiple hash functions using the trick described in
-// http://willwhim.wpengine.com/2011/09/03/producing-n-hash-functions-by-hashing-only-once/
-// hash(i) = (a + b * i ) % m
-func getBitPositions(item string) func() (bitPosition uint64, hasNext bool) {
+type bitPositionsIterator struct {
+	a, b, i uint64
+}
+
+var bpIterator *bitPositionsIterator = &bitPositionsIterator{}
+
+func newBitPositionsIterator(item *string) *bitPositionsIterator {
 	fnvHash := fnv.New64()
 
 	// The hack below was copied from the solution:
@@ -74,47 +77,48 @@ func getBitPositions(item string) func() (bitPosition uint64, hasNext bool) {
 	// However, this `unsafe.Pointer` hack lets us avoid copying data and
 	// get a slight speed-up by directly referencing the underlying bytes
 	// of `item`.
-
-	fnvHash.Write(*(*[]byte)(unsafe.Pointer(&item)))
+	fnvHash.Write(*(*[]byte)(unsafe.Pointer(item)))
 	fnvSum := fnvHash.Sum64()
-	fnvSum1 := fnvSum & 0xffffffff
-	fnvSum2 := fnvSum >> 32
-	var i uint64 = 0
-	return func() (bitPosition uint64, hasNext bool) {
-		if i < numberOfHashFunctions {
-			bitPosition = (fnvSum1 + fnvSum2*i) % memoryUsageInBits
-			i++
-			return bitPosition, true
-		} else {
-			return 0, false
-		}
-	}
+	bpIterator.a = fnvSum & 0xffffffff
+	bpIterator.b = fnvSum >> 32
+	bpIterator.i = 0
+
+	return bpIterator
+}
+
+func (bpi *bitPositionsIterator) next() (bitPosition uint64) {
+	// Produce multiple hash functions using the trick described in
+	// http://willwhim.wpengine.com/2011/09/03/producing-n-hash-functions-by-hashing-only-once/
+	// hash(i) = (a + b * i ) % m
+	bitPosition = (bpi.a + bpi.b*bpi.i) % memoryUsageInBits
+	bpi.i++
+	return
+}
+
+func (bpi *bitPositionsIterator) hasNext() bool {
+	return bpi.i < numberOfHashFunctions
 }
 
 func (b *myBloomFilter) add(item string) {
-	bitPositions := getBitPositions(item)
-	for bitPosition, hasNext := bitPositions(); hasNext; {
+	bitPositionsIterator := newBitPositionsIterator(&item)
+	for bitPositionsIterator.hasNext() {
+		bitPosition := bitPositionsIterator.next()
 		bucketNumber := bitPosition / bitsInBucket
 		bitNumberInBucket := (bitsInBucket - 1) - (bitPosition % bitsInBucket)
 		b.data[bucketNumber] |= (1 << bitNumberInBucket)
-		bitPosition, hasNext = bitPositions()
 	}
-	bitPositions = nil // for GC
 }
 
 func (b *myBloomFilter) maybeContains(item string) bool {
-	bitPositions := getBitPositions(item)
-	for bitPosition, hasNext := bitPositions(); hasNext; {
+	bitPositionsIterator := newBitPositionsIterator(&item)
+	for bitPositionsIterator.hasNext() {
+		bitPosition := bitPositionsIterator.next()
 		bucketNumber := bitPosition / bitsInBucket
 		bitNumberInBucket := (bitsInBucket - 1) - (bitPosition % bitsInBucket)
 		if (b.data[bucketNumber] & (1 << bitNumberInBucket)) == 0 {
-
-			bitPositions = nil // for GC
 			return false
 		}
-		bitPosition, hasNext = bitPositions()
 	}
-	bitPositions = nil // for GC
 	return true
 }
 

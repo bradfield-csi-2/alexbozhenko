@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"runtime"
 	"runtime/pprof"
 	"time"
 )
@@ -33,6 +34,7 @@ func loadWords(path string) ([]string, error) {
 }
 
 var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to `file`")
+var memprofile = flag.String("memprofile", "", "write memory profile to `file`")
 
 func main() {
 	words, err := loadWords(wordsPath)
@@ -59,7 +61,7 @@ func main() {
 	falsePositives := 0
 	numChecked := 0
 
-	for numOfIterations := 0; numOfIterations < 1; numOfIterations++ {
+	for numOfIterations := 0; numOfIterations < 300; numOfIterations++ {
 		// Add every other word (even indices)
 		for i := 0; i < len(words); i += 2 {
 			b.add(words[i])
@@ -84,6 +86,18 @@ func main() {
 	}
 
 	falsePositiveRate := float64(falsePositives) / float64(numChecked)
+
+	if *memprofile != "" {
+		f, err := os.Create(*memprofile)
+		if err != nil {
+			log.Fatal("could not create memory profile: ", err)
+		}
+		defer f.Close() // error handling omitted for example
+		runtime.GC()    // get up-to-date statistics
+		if err := pprof.WriteHeapProfile(f); err != nil {
+			log.Fatal("could not write memory profile: ", err)
+		}
+	}
 
 	fmt.Printf("Elapsed time: %s\n", time.Since(start))
 	fmt.Printf("Memory usage: %d bytes\n", b.memoryUsage())
