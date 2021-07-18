@@ -2,13 +2,19 @@ package main
 
 import (
 	"bufio"
+	"flag"
 	"fmt"
 	"log"
 	"os"
+	"runtime/pprof"
 	"time"
 )
 
 const wordsPath = "/usr/share/dict/words"
+
+// ngerman is bigger on my machine
+// it is 3,9M, and 304k words
+//const wordsPath = "/usr/share/dict/ngerman"
 
 func loadWords(path string) ([]string, error) {
 	file, err := os.Open(path)
@@ -26,40 +32,55 @@ func loadWords(path string) ([]string, error) {
 	return result, nil
 }
 
+var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to `file`")
+
 func main() {
 	words, err := loadWords(wordsPath)
 	if err != nil {
 		log.Fatal(err)
 	}
 
+	flag.Parse()
+	if *cpuprofile != "" {
+		f, err := os.Create(*cpuprofile)
+		if err != nil {
+			log.Fatal("could not create CPU profile: ", err)
+		}
+		defer f.Close()
+		if err := pprof.StartCPUProfile(f); err != nil {
+			log.Fatal("could not start CPU profile: ", err)
+		}
+		defer pprof.StopCPUProfile()
+	}
+
 	start := time.Now()
 
-	// TODO: Replace trivialBloomFilter with your own implementation
-	var b bloomFilter = newTrivialBloomFilter()
-
-	// Add every other word (even indices)
-	for i := 0; i < len(words); i += 2 {
-		b.add(words[i])
-	}
-
-	// Make sure there are no false negatives
-	for i := 0; i < len(words); i += 2 {
-		word := words[i]
-		if !b.maybeContains(word) {
-			log.Fatalf("false negative for word %q\n", word)
-		}
-	}
-
+	var b bloomFilter = newMyBloomFilter()
 	falsePositives := 0
 	numChecked := 0
 
-	// None of the words at odd indices were added, so whenever
-	// maybeContains returns true, it's a false positive
-	for i := 1; i < len(words); i += 2 {
-		if b.maybeContains(words[i]) {
-			falsePositives++
+	for tmp := 0; tmp < 1; tmp++ {
+		// Add every other word (even indices)
+		for i := 0; i < len(words); i += 2 {
+			b.add(words[i])
 		}
-		numChecked++
+
+		// Make sure there are no false negatives
+		for i := 0; i < len(words); i += 2 {
+			word := words[i]
+			if !b.maybeContains(word) {
+				log.Fatalf("false negative for word %q\n", word)
+			}
+		}
+
+		// None of the words at odd indices were added, so whenever
+		// maybeContains returns true, it's a false positive
+		for i := 1; i < len(words); i += 2 {
+			if b.maybeContains(words[i]) {
+				falsePositives++
+			}
+			numChecked++
+		}
 	}
 
 	falsePositiveRate := float64(falsePositives) / float64(numChecked)
