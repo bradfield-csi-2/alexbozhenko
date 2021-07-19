@@ -27,11 +27,11 @@ func Build(filePath string, sortedItems []Item) error {
 	// +--------------+
 	// | 3            | number of entries (4 bytes)
 	// +--------------+
-	// | 16           | offset of first key data (4 bytes)
+	// | 16           | offset of last byte of first key-value offset pair (4 bytes)
 	// +--------------+
-	// | 24           | offset of second key data (4 bytes)
+	// | 24           | offset of last byte of second key-value offset pair (4 bytes)
 	// +--------------+
-	// | 39           | offset of third key data (4 bytes)
+	// | 39           | offset of last byte of third key-value offset pair (4 bytes)
 	// +--------------+-----------------+
 	// | key one | data offset(4 bytes) |
 	// +----------------+----------------------+
@@ -74,21 +74,22 @@ func LoadTable(filePath string) (*Table, error) {
 	buf := make([]byte, 4)
 	io.ReadFull(f, buf)
 	entriesNumber := binary.BigEndian.Uint32(buf)
-	keyOffsets := make([]uint32, entriesNumber+1)
-	keyOffsets[0] = (entriesNumber + 1) * 4
+
+	keyOffsets := make([]uint32, entriesNumber)
 	for i := range keyOffsets {
 		io.ReadFull(f, buf)
 		keyOffsets[i] = binary.BigEndian.Uint32(buf)
 	}
-	for i := 1; i < len(keyOffsets); i++ {
-		keyValueStart := keyOffsets[i-1]
-		keyValueEnd := keyOffsets[i]
-		file.Seek(int64(keyValueStart), io.SeekStart)
-		buf := make([]byte, keyValueEnd-keyValueStart+1)
+	key_ValueOffset_Start := (entriesNumber + 1) * 4
+	for i := 0; i < len(keyOffsets)-1; i++ {
+		key_ValueOffset_End := keyOffsets[i]
+		file.Seek(int64(key_ValueOffset_Start), io.SeekStart)
+		buf := make([]byte, key_ValueOffset_End-key_ValueOffset_Start+1)
 		io.ReadFull(f, buf)
 		key := string(buf[:len(buf)-4])
 		valueOffset := binary.BigEndian.Uint32(buf[len(buf)-4:])
 		keysToValuesOffsets.Put(key, valueOffset)
+		key_ValueOffset_Start = key_ValueOffset_End + 1
 	}
 
 	return &Table{
