@@ -44,7 +44,6 @@ type Table struct {
 	// Design of the file format requires us to load entire list of
 	// keys into memory, so we can search quickly, which is suboptiomal.
 	// Fix in next iteration?
-
 	// skip list of keys to data offsets
 	// file descriptor? pointer? ...
 }
