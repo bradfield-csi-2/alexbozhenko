@@ -27,17 +27,17 @@ func (node skipListNode) Level() int {
 
 // head is a dummy node with nil item, that is used to
 // simplify handiling edge cases. Head never contains an item
-type skipListOC struct {
+type SkipListOC struct {
 	head *skipListNode
 }
 
-func (list skipListOC) Level() int {
+func (list SkipListOC) Level() int {
 	return len(list.head.forward)
 }
 
-func NewSkipListOC() *skipListOC {
+func NewSkipListOC() *SkipListOC {
 	rand.Seed(time.Now().UnixNano())
-	return &skipListOC{
+	return &SkipListOC{
 		head: &skipListNode{
 			// item is nil
 			forward: []*skipListNode{nil},
@@ -45,7 +45,7 @@ func NewSkipListOC() *skipListOC {
 	}
 }
 
-func (list skipListOC) String() string {
+func (list SkipListOC) String() string {
 	result := ""
 	for i := (list.Level() - 1); i >= 0; i-- {
 		result += fmt.Sprintf("Level %v:\n", i+1)
@@ -59,7 +59,7 @@ func (list skipListOC) String() string {
 	return result
 }
 
-func (list skipListOC) Length() (length int) {
+func (list SkipListOC) Length() (length int) {
 	node := list.head.forward[0]
 	length = 0
 	for ; node != nil; length++ {
@@ -82,7 +82,7 @@ func getLevelInHumanTerms() (level int) {
 // dummy head node is returned when "previous" node at this Level
 // should be the first in the list
 // Never returns an empty slice, since level of empty list = 1
-func (list *skipListOC) findPreviousNodes(key string) []*skipListNode {
+func (list *SkipListOC) findPreviousNodes(key string) []*skipListNode {
 	previousNodes := make([]*skipListNode, list.Level())
 	topLevel := list.Level() - 1
 	currentNode := list.head
@@ -98,7 +98,7 @@ func (list *skipListOC) findPreviousNodes(key string) []*skipListNode {
 }
 
 // Return previous nodes, and nil for node, if node was not found in the list
-func (skipList *skipListOC) get(key string) (previousNodes []*skipListNode,
+func (skipList *SkipListOC) get(key string) (previousNodes []*skipListNode,
 	foundNode *skipListNode) {
 	foundNode = nil
 	previousNodes = skipList.findPreviousNodes(key)
@@ -111,7 +111,7 @@ func (skipList *skipListOC) get(key string) (previousNodes []*skipListNode,
 	return
 }
 
-func (skipList *skipListOC) Get(key string) (uint32, bool) {
+func (skipList *SkipListOC) Get(key string) (uint32, bool) {
 	_, node := skipList.get(key)
 	if node != nil {
 		return node.item.Value, true
@@ -119,7 +119,7 @@ func (skipList *skipListOC) Get(key string) (uint32, bool) {
 	return 0, false
 }
 
-func (skipList *skipListOC) Put(key string, value uint32) bool {
+func (skipList *SkipListOC) Put(key string, value uint32) bool {
 	previousNodes, node := skipList.get(key)
 	if node != nil {
 		node.item.Value = value
@@ -151,7 +151,7 @@ func (skipList *skipListOC) Put(key string, value uint32) bool {
 	return true
 }
 
-func (skipList *skipListOC) Delete(key string) bool {
+func (skipList *SkipListOC) Delete(key string) bool {
 	previousNodes, node := skipList.get(key)
 	if node == nil {
 		return false
@@ -179,7 +179,7 @@ func (skipList *skipListOC) Delete(key string) bool {
 	return true
 }
 
-func (skipList *skipListOC) RangeScan(startKey, endKey string) Iterator {
+func (skipList *SkipListOC) RangeScan(startKey, endKey string) Iterator {
 	previousNodes, startNode := skipList.get(startKey)
 	var currentNode *skipListNode
 	if startNode != nil {
@@ -198,7 +198,7 @@ func (skipList *skipListOC) RangeScan(startKey, endKey string) Iterator {
 }
 
 type skipListOCIterator struct {
-	skipList         *skipListOC
+	skipList         *SkipListOC
 	currentNode      *skipListNode
 	startKey, endKey string
 }

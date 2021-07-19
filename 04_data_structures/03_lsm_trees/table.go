@@ -1,7 +1,21 @@
 package table
 
+import (
+	"bufio"
+	"encoding/binary"
+	"io"
+	"lsm_trees/skip_list"
+	"os"
+)
+
 type Item struct {
 	Key, Value string
+}
+
+func handleError(err error) {
+	if err != nil {
+		panic(err)
+	}
 }
 
 // Given a sorted list of key/value pairs, write them out according to the format you designed.
@@ -44,14 +58,43 @@ type Table struct {
 	// Design of the file format requires us to load entire list of
 	// keys into memory, so we can search quickly, which is suboptiomal.
 	// Fix in next iteration?
-	// skip list of keys to data offsets
-	// file descriptor? pointer? ...
+	file                *os.File
+	keysToValuesOffsets *skip_list.SkipListOC
 }
 
 // Prepares a Table for efficient access. This will likely involve reading some metadata
 // in order to populate the fields of the Table struct.
 func LoadTable(filePath string) (*Table, error) {
-	return nil, nil
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil, err
+	}
+	keysToValuesOffsets := skip_list.NewSkipListOC()
+	f := bufio.NewReader(file)
+	buf := make([]byte, 4)
+	io.ReadFull(f, buf)
+	entriesNumber := binary.BigEndian.Uint32(buf)
+	keyOffsets := make([]uint32, entriesNumber+1)
+	keyOffsets[0] = (entriesNumber + 1) * 4
+	for i := range keyOffsets {
+		io.ReadFull(f, buf)
+		keyOffsets[i] = binary.BigEndian.Uint32(buf)
+	}
+	for i := 1; i < len(keyOffsets); i++ {
+		keyValueStart := keyOffsets[i-1]
+		keyValueEnd := keyOffsets[i]
+		file.Seek(int64(keyValueStart), io.SeekStart)
+		buf := make([]byte, keyValueEnd-keyValueStart+1)
+		io.ReadFull(f, buf)
+		key := string(buf[:len(buf)-4])
+		valueOffset := binary.BigEndian.Uint32(buf[len(buf)-4:])
+		keysToValuesOffsets.Put(key, valueOffset)
+	}
+
+	return &Table{
+		file:                file,
+		keysToValuesOffsets: keysToValuesOffsets,
+	}, nil
 }
 
 func (t *Table) Get(key string) (string, bool, error) {
