@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-const N_WORDS = 100_000
+const N_WORDS = 80_000
 
 // min and max are inclusive.
 func randomWord(min, max int) string {
@@ -109,4 +109,26 @@ func TestTable(t *testing.T) {
 			t.Fatalf("Unexpected RangeScan result\n\nExpected: %v\n\nActual: %v", expectedScan, actualScan)
 		}
 	*/
+}
+
+func BenchmarkTable(b *testing.B) {
+
+	sortedItems := generateSortedItems(N_WORDS)
+	toInclude := sortedItems[:N_WORDS/2]
+	toExclude := sortedItems[N_WORDS/2:]
+
+	table, err := LoadTable("/home/alex/large_table")
+	//b.ResetTimer()
+	if err != nil {
+		b.Fatalf("Error loading Table: %v", err)
+	}
+	for i := 0; i < b.N; i++ {
+		for _, item := range toInclude {
+			table.Get(item.Key)
+		}
+
+		for _, item := range toExclude {
+			table.Get(item.Key)
+		}
+	}
 }

@@ -81,7 +81,7 @@ func Build(filePath string, sortedItems []Item) error {
 			footerEntries = append(footerEntries, fE)
 			bytesWrittenInCurrentBlock = 0
 			totalBlocks++
-			fmt.Printf("Adding footer entry %+v with %v KV pairs\n", fE, kvPairsInCurrentBlock)
+			//fmt.Printf("Adding footer entry %+v with %v KV pairs\n", fE, kvPairsInCurrentBlock)
 			kvPairsInCurrentBlock = 0
 		}
 		binary.Write(file, binary.BigEndian, uint32(len(item.Key)))
@@ -162,7 +162,7 @@ func LoadTable(filePath string) (*Table, error) {
 
 func (t *Table) Get(key string) (string, bool, error) {
 	blockOffset, ok := t.keysToKVPairOffsets.GetLE(key)
-	fmt.Printf("Getting key=%v, found block offset=%v\n", key, blockOffset)
+	//fmt.Printf("Getting key=%v, found block offset=%v\n", key, blockOffset)
 	f := t.file
 	if ok {
 		// block containing key that is less than or equal was found
@@ -183,7 +183,8 @@ func (t *Table) Get(key string) (string, bool, error) {
 			currentKey := string(keyBuf)
 			if currentKey == key {
 				// We found a value, return it
-				fmt.Printf("Found a value after doing %v linear skips\n", elementsSkipped)
+				//fmt.Printf("Found a value after doing %v linear skips\n", elementsSkipped)
+
 				valueBuf := make([]byte, valueLength)
 				io.ReadFull(f, valueBuf)
 				value := string(valueBuf)
