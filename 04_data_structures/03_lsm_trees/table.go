@@ -26,7 +26,6 @@ type footerEntry struct {
 }
 
 func (fE *footerEntry) write(w io.Writer) {
-	fmt.Printf("writitng footer entry %+v\n", fE)
 	binary.Write(w, binary.BigEndian, uint32(len(fE.key)))
 	key := fE.key
 	binary.Write(w, binary.BigEndian, *(*[]byte)(unsafe.Pointer(&key)))
@@ -67,19 +66,23 @@ func Build(filePath string, sortedItems []Item) error {
 	bytesWrittenInCurrentBlock := 0
 	dataBytesWrittenTotal := 0
 	totalBlocks := 0
+	kvPairsInCurrentBlock := 0
 
 	// Write key_length, value_length, key, value
 	// from the beginning of the file
 	for _, item := range sortedItems {
-		fmt.Printf("Writing key(%v):val(%v)= %v:%v\n", len(item.Key), len(item.Value), item.Key, item.Value)
+		//	fmt.Printf("Writing key(%v):val(%v)= %v:%v\n", len(item.Key), len(item.Value), item.Key, item.Value)
 		if bytesWrittenInCurrentBlock > BLOCK_SIZE || // block already filled in
 			bytesWrittenInCurrentBlock == 0 { // first block
-			footerEntries = append(footerEntries, footerEntry{
+			fE := footerEntry{
 				key:          item.Key,
 				block_offset: uint32(dataBytesWrittenTotal),
-			})
+			}
+			footerEntries = append(footerEntries, fE)
 			bytesWrittenInCurrentBlock = 0
 			totalBlocks++
+			fmt.Printf("Adding footer entry %+v with %v KV pairs\n", fE, kvPairsInCurrentBlock)
+			kvPairsInCurrentBlock = 0
 		}
 		binary.Write(file, binary.BigEndian, uint32(len(item.Key)))
 		binary.Write(file, binary.BigEndian, uint32(len(item.Value)))
@@ -91,6 +94,7 @@ func Build(filePath string, sortedItems []Item) error {
 		binary.Write(file, binary.BigEndian, *(*[]byte)(unsafe.Pointer(&item.Value)))
 		dataBytesWrittenTotal += len(item.Value)
 		bytesWrittenInCurrentBlock += len(item.Value)
+		kvPairsInCurrentBlock++
 	}
 	// Write footer consisting of:
 	// key_lengh, key, offset
@@ -117,6 +121,7 @@ type Table struct {
 	// keys into memory, so we can search quickly, which is suboptiomal.
 	// Fix in next iteration?
 	file                *os.File
+	footerStartOffset   uint32
 	keysToKVPairOffsets *skip_list.SkipListOC
 }
 
@@ -140,24 +145,58 @@ func LoadTable(filePath string) (*Table, error) {
 	for blockNumber := 0; blockNumber < int(numberOfBlocks); blockNumber++ {
 		io.ReadFull(f, buf)
 		keyLength := binary.BigEndian.Uint32(buf)
-		fmt.Println("keyLength = ", keyLength)
 		keyBuf := make([]byte, keyLength)
 		io.ReadFull(f, keyBuf)
 		key := string(keyBuf)
 		io.ReadFull(f, buf)
 		blockOffset := binary.BigEndian.Uint32(buf)
 		keysToKVPairOffsets.Put(key, blockOffset)
-		fmt.Printf("key = %v, offset = %v\n", key, blockOffset)
 	}
 
 	return &Table{
 		file:                file,
+		footerStartOffset:   footerStartOffset,
 		keysToKVPairOffsets: keysToKVPairOffsets,
 	}, nil
 }
 
 func (t *Table) Get(key string) (string, bool, error) {
+	blockOffset, ok := t.keysToKVPairOffsets.GetLE(key)
+	fmt.Printf("Getting key=%v, found block offset=%v\n", key, blockOffset)
+	f := t.file
+	if ok {
+		// block containing key that is less than or equal was found
+		// now let's do a linear scan until we find the matchin key
+		buf := make([]byte, 4)
+		f.Seek(int64(blockOffset), io.SeekStart)
+		// start of the loop
+		currentSeek, _ := f.Seek(0, io.SeekCurrent)
+		elementsSkipped := 0
+		for ; uint32(currentSeek) < t.footerStartOffset; currentSeek, _ = f.Seek(0, io.SeekCurrent) {
 
+			io.ReadFull(f, buf)
+			keyLength := binary.BigEndian.Uint32(buf)
+			io.ReadFull(f, buf)
+			valueLength := binary.BigEndian.Uint32(buf)
+			keyBuf := make([]byte, keyLength)
+			io.ReadFull(f, keyBuf)
+			currentKey := string(keyBuf)
+			if currentKey == key {
+				// We found a value, return it
+				fmt.Printf("Found a value after doing %v linear skips\n", elementsSkipped)
+				valueBuf := make([]byte, valueLength)
+				io.ReadFull(f, valueBuf)
+				value := string(valueBuf)
+				return value, true, nil
+			} else if currentKey > key {
+				return "", false, nil
+			}
+			// keep going with linear scan
+			f.Seek(int64(valueLength), io.SeekCurrent)
+			elementsSkipped++
+		}
+
+	}
 	return "", false, nil
 }
 

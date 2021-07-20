@@ -111,6 +111,19 @@ func (skipList *SkipListOC) get(key string) (previousNodes []*skipListNode,
 	return
 }
 
+func (skipList *SkipListOC) GetLE(key string) (uint32, bool) {
+	previousNodes, node := skipList.get(key)
+	if node != nil {
+		return node.item.Value, true
+	} else {
+		if previousNodes[0] == skipList.head {
+			return 0, false
+		} else {
+			return previousNodes[0].item.Value, true
+		}
+	}
+}
+
 func (skipList *SkipListOC) Get(key string) (uint32, bool) {
 	_, node := skipList.get(key)
 	if node != nil {
