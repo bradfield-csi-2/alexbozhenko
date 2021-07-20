@@ -118,10 +118,10 @@ func BenchmarkTable(b *testing.B) {
 	toExclude := sortedItems[N_WORDS/2:]
 
 	table, err := LoadTable("/home/alex/large_table")
-	//b.ResetTimer()
 	if err != nil {
 		b.Fatalf("Error loading Table: %v", err)
 	}
+	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		for _, item := range toInclude {
 			table.Get(item.Key)

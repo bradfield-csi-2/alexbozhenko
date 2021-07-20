@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	bloom "lsm_trees/bloom_filter"
 	"lsm_trees/skip_list"
 	"os"
 	"unsafe"
@@ -123,6 +124,7 @@ type Table struct {
 	file                *os.File
 	footerStartOffset   uint32
 	keysToKVPairOffsets *skip_list.SkipListOC
+	bloomFilter         *bloom.MyBloomFilter
 }
 
 // Prepares a Table for efficient access. This will likely involve reading some metadata
@@ -133,6 +135,7 @@ func LoadTable(filePath string) (*Table, error) {
 		return nil, err
 	}
 	keysToKVPairOffsets := skip_list.NewSkipListOC()
+	bloomFiler := bloom.NewMyBloomFilter()
 	f := bufio.NewReader(file)
 	file.Seek(-8, io.SeekEnd)
 	buf := make([]byte, 4)
@@ -150,6 +153,7 @@ func LoadTable(filePath string) (*Table, error) {
 		key := string(keyBuf)
 		io.ReadFull(f, buf)
 		blockOffset := binary.BigEndian.Uint32(buf)
+		bloomFiler.Add(key)
 		keysToKVPairOffsets.Put(key, blockOffset)
 	}
 
@@ -157,47 +161,56 @@ func LoadTable(filePath string) (*Table, error) {
 		file:                file,
 		footerStartOffset:   footerStartOffset,
 		keysToKVPairOffsets: keysToKVPairOffsets,
+		bloomFilter:         bloomFiler,
 	}, nil
 }
 
 func (t *Table) Get(key string) (string, bool, error) {
 	blockOffset, ok := t.keysToKVPairOffsets.GetLE(key)
+	if !ok {
+		return "", false, nil
+	}
+
+	//If key is not found in bloomFilter, there is no need to continue
+	if !t.bloomFilter.MaybeContains(key) {
+		return "", false, nil
+	}
+
 	//fmt.Printf("Getting key=%v, found block offset=%v\n", key, blockOffset)
 	f := t.file
-	if ok {
-		// block containing key that is less than or equal was found
-		// now let's do a linear scan until we find the matchin key
-		buf := make([]byte, 4)
-		f.Seek(int64(blockOffset), io.SeekStart)
-		// start of the loop
-		currentSeek, _ := f.Seek(0, io.SeekCurrent)
-		elementsSkipped := 0
-		for ; uint32(currentSeek) < t.footerStartOffset; currentSeek, _ = f.Seek(0, io.SeekCurrent) {
 
-			io.ReadFull(f, buf)
-			keyLength := binary.BigEndian.Uint32(buf)
-			io.ReadFull(f, buf)
-			valueLength := binary.BigEndian.Uint32(buf)
-			keyBuf := make([]byte, keyLength)
-			io.ReadFull(f, keyBuf)
-			currentKey := string(keyBuf)
-			if currentKey == key {
-				// We found a value, return it
-				//fmt.Printf("Found a value after doing %v linear skips\n", elementsSkipped)
+	// block containing key that is less than or equal was found
+	// now let's do a linear scan until we find the matching key
+	buf := make([]byte, 4)
+	f.Seek(int64(blockOffset), io.SeekStart)
+	// start of the loop
+	currentSeek, _ := f.Seek(0, io.SeekCurrent)
+	elementsSkipped := 0
+	for ; uint32(currentSeek) < t.footerStartOffset; currentSeek, _ = f.Seek(0, io.SeekCurrent) {
 
-				valueBuf := make([]byte, valueLength)
-				io.ReadFull(f, valueBuf)
-				value := string(valueBuf)
-				return value, true, nil
-			} else if currentKey > key {
-				return "", false, nil
-			}
-			// keep going with linear scan
-			f.Seek(int64(valueLength), io.SeekCurrent)
-			elementsSkipped++
+		io.ReadFull(f, buf)
+		keyLength := binary.BigEndian.Uint32(buf)
+		io.ReadFull(f, buf)
+		valueLength := binary.BigEndian.Uint32(buf)
+		keyBuf := make([]byte, keyLength)
+		io.ReadFull(f, keyBuf)
+		currentKey := string(keyBuf)
+		if currentKey == key {
+			// We found a value, return it
+			//fmt.Printf("Found a value after doing %v linear skips\n", elementsSkipped)
+
+			valueBuf := make([]byte, valueLength)
+			io.ReadFull(f, valueBuf)
+			value := string(valueBuf)
+			return value, true, nil
+		} else if currentKey > key {
+			return "", false, nil
 		}
-
+		// keep going with linear scan
+		f.Seek(int64(valueLength), io.SeekCurrent)
+		elementsSkipped++
 	}
+
 	return "", false, nil
 }
 
@@ -212,6 +225,6 @@ type Iterator interface {
 	// Indicates whether the iterator is currently pointing to a valid item.
 	Valid() bool
 
-	// Returns the Item the iterator is currently pointing to. Assumes Valid() == true.
+	// Returns the Item the iterator is currently` pointing to. Assumes Valid() == true.
 	Item() Item
 }

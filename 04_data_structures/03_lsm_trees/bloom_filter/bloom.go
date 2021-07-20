@@ -19,7 +19,7 @@ import (
 // Calculate the error rate  = 0.069
 // https://www.wolframalpha.com/input/?i=n+%3D+123115%3B+m+%3D+800000%3B+k%3D2%3B+%281-2.7%5E%28-k*n%2Fm%29%29%5Ek
 
-const memoryUsageInBits = 800_000
+const memoryUsageInBits = 80_000_000 // 10MB
 const numberOfHashFunctions = 9
 const bitsInBucket = 64
 
@@ -36,18 +36,18 @@ type bloomFilter interface {
 	memoryUsage() int
 }
 
-type myBloomFilter struct {
+type MyBloomFilter struct {
 	data []uint64
 }
 
-func newMyBloomFilter() *myBloomFilter {
-	return &myBloomFilter{
+func NewMyBloomFilter() *MyBloomFilter {
+	return &MyBloomFilter{
 		data: make([]uint64, int64(math.Ceil(
 			float64(memoryUsageInBits)/float64(bitsInBucket)))),
 	}
 }
 
-func (bloomFilter *myBloomFilter) String() string {
+func (bloomFilter *MyBloomFilter) String() string {
 	res := ""
 	for i, bucket := range bloomFilter.data {
 		if bucket != 0 {
@@ -85,7 +85,7 @@ func getBitPositions(item string) []uint64 {
 	return bitPositions
 }
 
-func (b *myBloomFilter) add(item string) {
+func (b *MyBloomFilter) Add(item string) {
 	bitPositions := getBitPositions(item)
 	for _, bitPosition := range bitPositions {
 		bucketNumber := bitPosition / bitsInBucket
@@ -94,7 +94,7 @@ func (b *myBloomFilter) add(item string) {
 	}
 }
 
-func (b *myBloomFilter) maybeContains(item string) bool {
+func (b *MyBloomFilter) MaybeContains(item string) bool {
 	bitPositions := getBitPositions(item)
 	for _, bitPosition := range bitPositions {
 		bucketNumber := bitPosition / bitsInBucket
@@ -106,6 +106,6 @@ func (b *myBloomFilter) maybeContains(item string) bool {
 	return true
 }
 
-func (b *myBloomFilter) memoryUsage() int {
+func (b *MyBloomFilter) memoryUsage() int {
 	return binary.Size(b.data)
 }
