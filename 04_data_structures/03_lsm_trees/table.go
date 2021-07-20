@@ -3,9 +3,11 @@ package table
 import (
 	"bufio"
 	"encoding/binary"
+	"fmt"
 	"io"
 	"lsm_trees/skip_list"
 	"os"
+	"unsafe"
 )
 
 type Item struct {
@@ -18,34 +20,83 @@ func handleError(err error) {
 	}
 }
 
+type footerEntry struct {
+	key          string
+	block_offset uint32 // position of the first key_length in the data block
+}
+
+func (fE *footerEntry) write(w io.Writer) {
+	fmt.Printf("writitng footer entry %+v\n", fE)
+	binary.Write(w, binary.BigEndian, uint32(len(fE.key)))
+	key := fE.key
+	binary.Write(w, binary.BigEndian, *(*[]byte)(unsafe.Pointer(&key)))
+	binary.Write(w, binary.BigEndian, uint32(fE.block_offset))
+}
+
+const BLOCK_SIZE = 4096 //bytes
+
 // Given a sorted list of key/value pairs, write them out according to the format you designed.
 func Build(filePath string, sortedItems []Item) error {
-	// Based on the idea in this answer:
-	// https://dba.stackexchange.com/a/11190
+	// Updated file format:
+	// data block
+	// data block
+	// data block
+	// ...
+	// data block
+	// Footer that loaded into memory with metadata that should allow binary search :
+	// key_length, key, block_offset
+	// key_length, key, block_offset
+	// key_length, key, block_offset
+	// ...
+	// key_length, key, block_offset
+	// offset_to_footer_beginning (uint32)
 
-	// File format is the fowllowing:
-	// +--------------+
-	// | 3            | number of entries (4 bytes)
-	// +--------------+
-	// | 16           | offset of last byte of first key-value offset pair (4 bytes)
-	// +--------------+
-	// | 24           | offset of last byte of second key-value offset pair (4 bytes)
-	// +--------------+
-	// | 39           | offset of last byte of third key-value offset pair (4 bytes)
-	// +--------------+-----------------+
-	// | key one | data offset(4 bytes) |
-	// +----------------+----------------------+
-	// | key number two | data offset(4 bytes) |
-	// +-----------------------+----------------------+
-	// | this is the third key | data offset(4 bytes) |
-	// +-----------------------+----------------------+
-	// +-----------+
-	// | value one |
-	// +-----------+-------+
-	// | value for key two |
-	// +-------------------------+
-	// | this is the third value |
-	// +-------------------------+
+	// Each block contains(we will do linear scan inside the block):
+	// key_length varint32 (or just uint32)
+	// value_length varint32
+	// key
+	// value
+	// ...
+	file, err := os.Create(filePath)
+	footerEntries := []footerEntry{}
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	bytesWrittenInCurrentBlock := 0
+	dataBytesWrittenTotal := 0
+
+	// Write key_length, value_length, key, value
+	// from the beginning of the file
+	for _, item := range sortedItems {
+		fmt.Printf("Writing key(%v):val(%v)= %v:%v\n", len(item.Key), len(item.Value), item.Key, item.Value)
+		if bytesWrittenInCurrentBlock > BLOCK_SIZE || // block already filled in
+			bytesWrittenInCurrentBlock == 0 { // first block
+			footerEntries = append(footerEntries, footerEntry{
+				key:          item.Key,
+				block_offset: uint32(dataBytesWrittenTotal),
+			})
+			bytesWrittenInCurrentBlock = 0
+		}
+		binary.Write(file, binary.BigEndian, uint32(len(item.Key)))
+		binary.Write(file, binary.BigEndian, uint32(len(item.Value)))
+		dataBytesWrittenTotal += 8
+		bytesWrittenInCurrentBlock += 8
+		binary.Write(file, binary.BigEndian, *(*[]byte)(unsafe.Pointer(&item.Key)))
+		dataBytesWrittenTotal += len(item.Key)
+		bytesWrittenInCurrentBlock += len(item.Key)
+		binary.Write(file, binary.BigEndian, *(*[]byte)(unsafe.Pointer(&item.Value)))
+		dataBytesWrittenTotal += len(item.Value)
+		bytesWrittenInCurrentBlock += len(item.Value)
+	}
+	// Write footer consisting of:
+	// write key_lengh, key, offset
+	// for each block
+	for _, fE := range footerEntries {
+		fE.write(file)
+	}
+	// write position of the beginning of the footer
+	binary.Write(file, binary.BigEndian, uint32(dataBytesWrittenTotal))
 	return nil
 }
 

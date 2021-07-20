@@ -2,13 +2,15 @@ package table
 
 import (
 	"bytes"
+	"fmt"
 	"io/ioutil"
 	"math/rand"
-	"os"
 	"path/filepath"
 	"sort"
 	"testing"
 )
+
+const N_WORDS = 1000
 
 // min and max are inclusive.
 func randomWord(min, max int) string {
@@ -46,16 +48,16 @@ func TestTable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	fmt.Println("Building in tmpdir=", dir)
 	// Clean up temp directory at end of test; you can remove this for debugging.
-	defer os.RemoveAll(dir)
+	//defer os.RemoveAll(dir)
 
 	tmpfile := filepath.Join(dir, "tmpfile")
 
-	n := 1000
-	sortedItems := generateSortedItems(n)
+	sortedItems := generateSortedItems(N_WORDS)
 
-	toInclude := sortedItems[:n/2]
-	toExclude := sortedItems[n/2:]
+	toInclude := sortedItems[:N_WORDS/2]
+	toExclude := sortedItems[N_WORDS/2:]
 
 	err = Build(tmpfile, toInclude)
 	if err != nil {
