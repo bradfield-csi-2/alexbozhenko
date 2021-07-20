@@ -49,6 +49,7 @@ func Build(filePath string, sortedItems []Item) error {
 	// key_length, key, block_offset
 	// ...
 	// key_length, key, block_offset
+	// number of block pointers in the footer (uint32)
 	// offset_to_footer_beginning (uint32)
 
 	// Each block contains(we will do linear scan inside the block):
@@ -65,6 +66,7 @@ func Build(filePath string, sortedItems []Item) error {
 	defer file.Close()
 	bytesWrittenInCurrentBlock := 0
 	dataBytesWrittenTotal := 0
+	totalBlocks := 0
 
 	// Write key_length, value_length, key, value
 	// from the beginning of the file
@@ -77,6 +79,7 @@ func Build(filePath string, sortedItems []Item) error {
 				block_offset: uint32(dataBytesWrittenTotal),
 			})
 			bytesWrittenInCurrentBlock = 0
+			totalBlocks++
 		}
 		binary.Write(file, binary.BigEndian, uint32(len(item.Key)))
 		binary.Write(file, binary.BigEndian, uint32(len(item.Value)))
@@ -90,11 +93,15 @@ func Build(filePath string, sortedItems []Item) error {
 		bytesWrittenInCurrentBlock += len(item.Value)
 	}
 	// Write footer consisting of:
-	// write key_lengh, key, offset
+	// key_lengh, key, offset
 	// for each block
 	for _, fE := range footerEntries {
 		fE.write(file)
 	}
+
+	// write number of block pointers in the footer
+	binary.Write(file, binary.BigEndian, uint32(totalBlocks))
+
 	// write position of the beginning of the footer
 	binary.Write(file, binary.BigEndian, uint32(dataBytesWrittenTotal))
 	return nil
@@ -110,7 +117,7 @@ type Table struct {
 	// keys into memory, so we can search quickly, which is suboptiomal.
 	// Fix in next iteration?
 	file                *os.File
-	keysToValuesOffsets *skip_list.SkipListOC
+	keysToKVPairOffsets *skip_list.SkipListOC
 }
 
 // Prepares a Table for efficient access. This will likely involve reading some metadata
@@ -120,36 +127,37 @@ func LoadTable(filePath string) (*Table, error) {
 	if err != nil {
 		return nil, err
 	}
-	keysToValuesOffsets := skip_list.NewSkipListOC()
+	keysToKVPairOffsets := skip_list.NewSkipListOC()
 	f := bufio.NewReader(file)
+	file.Seek(-8, io.SeekEnd)
 	buf := make([]byte, 4)
 	io.ReadFull(f, buf)
-	entriesNumber := binary.BigEndian.Uint32(buf)
-
-	keyOffsets := make([]uint32, entriesNumber)
-	for i := range keyOffsets {
+	numberOfBlocks := binary.BigEndian.Uint32(buf)
+	io.ReadFull(f, buf)
+	footerStartOffset := binary.BigEndian.Uint32(buf)
+	file.Seek(int64(footerStartOffset), io.SeekStart)
+	fmt.Printf("numberOfBlocks = %v, footerStartOffset = %v\n", numberOfBlocks, footerStartOffset)
+	for blockNumber := 0; blockNumber < int(numberOfBlocks); blockNumber++ {
 		io.ReadFull(f, buf)
-		keyOffsets[i] = binary.BigEndian.Uint32(buf)
-	}
-	key_ValueOffset_Start := (entriesNumber + 1) * 4
-	for i := 0; i < len(keyOffsets)-1; i++ {
-		key_ValueOffset_End := keyOffsets[i]
-		file.Seek(int64(key_ValueOffset_Start), io.SeekStart)
-		buf := make([]byte, key_ValueOffset_End-key_ValueOffset_Start+1)
+		keyLength := binary.BigEndian.Uint32(buf)
+		fmt.Println("keyLength = ", keyLength)
+		keyBuf := make([]byte, keyLength)
+		io.ReadFull(f, keyBuf)
+		key := string(keyBuf)
 		io.ReadFull(f, buf)
-		key := string(buf[:len(buf)-4])
-		valueOffset := binary.BigEndian.Uint32(buf[len(buf)-4:])
-		keysToValuesOffsets.Put(key, valueOffset)
-		key_ValueOffset_Start = key_ValueOffset_End + 1
+		blockOffset := binary.BigEndian.Uint32(buf)
+		keysToKVPairOffsets.Put(key, blockOffset)
+		fmt.Printf("key = %v, offset = %v\n", key, blockOffset)
 	}
 
 	return &Table{
 		file:                file,
-		keysToValuesOffsets: keysToValuesOffsets,
+		keysToKVPairOffsets: keysToKVPairOffsets,
 	}, nil
 }
 
 func (t *Table) Get(key string) (string, bool, error) {
+
 	return "", false, nil
 }
 
