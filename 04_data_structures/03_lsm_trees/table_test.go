@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-const N_WORDS = 80_000
+const N_WORDS = 80_000_000
 
 // min and max are inclusive.
 func randomWord(min, max int) string {

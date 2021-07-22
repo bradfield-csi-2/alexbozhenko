@@ -49,6 +49,8 @@ func Build(filePath string, sortedItems []Item) error {
 	// key_length, key, block_offset
 	// ...
 	// key_length, key, block_offset
+	// bloom filter
+	// offset_to_bloomFilter_beginning (uint32)
 	// number of block pointers in the footer (uint32)
 	// offset_to_footer_beginning (uint32)
 
@@ -68,6 +70,7 @@ func Build(filePath string, sortedItems []Item) error {
 	dataBytesWrittenTotal := 0
 	totalBlocks := 0
 	kvPairsInCurrentBlock := 0
+	bloomFilter := bloom.NewMyBloomFilter()
 
 	// Write key_length, value_length, key, value
 	// from the beginning of the file
@@ -85,6 +88,7 @@ func Build(filePath string, sortedItems []Item) error {
 			//fmt.Printf("Adding footer entry %+v with %v KV pairs\n", fE, kvPairsInCurrentBlock)
 			kvPairsInCurrentBlock = 0
 		}
+		bloomFilter.Add(item.Key)
 		binary.Write(file, binary.BigEndian, uint32(len(item.Key)))
 		binary.Write(file, binary.BigEndian, uint32(len(item.Value)))
 		dataBytesWrittenTotal += 8
@@ -103,6 +107,14 @@ func Build(filePath string, sortedItems []Item) error {
 	for _, fE := range footerEntries {
 		fE.write(file)
 	}
+
+	// write bloom filter content to file
+	bloomFilterStartPosition, _ := file.Seek(0, io.SeekCurrent)
+	bFilter, _ := bloomFilter.MarshalBinary()
+	binary.Write(file, binary.BigEndian, bFilter)
+
+	// write bloom filter starting position
+	binary.Write(file, binary.BigEndian, uint32(bloomFilterStartPosition))
 
 	// write number of block pointers in the footer
 	binary.Write(file, binary.BigEndian, uint32(totalBlocks))
@@ -135,10 +147,11 @@ func LoadTable(filePath string) (*Table, error) {
 		return nil, err
 	}
 	keysToKVPairOffsets := skip_list.NewSkipListOC()
-	bloomFiler := bloom.NewMyBloomFilter()
 	f := bufio.NewReader(file)
-	file.Seek(-8, io.SeekEnd)
 	buf := make([]byte, 4)
+	bloomFilterEndPosition, _ := file.Seek(-12, io.SeekEnd)
+	io.ReadFull(f, buf)
+	bloomFilterStartPosition := binary.BigEndian.Uint32(buf)
 	io.ReadFull(f, buf)
 	numberOfBlocks := binary.BigEndian.Uint32(buf)
 	io.ReadFull(f, buf)
@@ -153,15 +166,22 @@ func LoadTable(filePath string) (*Table, error) {
 		key := string(keyBuf)
 		io.ReadFull(f, buf)
 		blockOffset := binary.BigEndian.Uint32(buf)
-		bloomFiler.Add(key)
 		keysToKVPairOffsets.Put(key, blockOffset)
 	}
+
+	file.Seek(int64(bloomFilterStartPosition), io.SeekStart)
+	bloomFilterBuf := make([]byte,
+		bloomFilterEndPosition-int64(bloomFilterStartPosition))
+	io.ReadFull(file, bloomFilterBuf)
+
+	bloomFilter := bloom.NewMyBloomFilter()
+	bloomFilter.UnmarshalBinary(bloomFilterBuf)
 
 	return &Table{
 		file:                file,
 		footerStartOffset:   footerStartOffset,
 		keysToKVPairOffsets: keysToKVPairOffsets,
-		bloomFilter:         bloomFiler,
+		bloomFilter:         bloomFilter,
 	}, nil
 }
 
