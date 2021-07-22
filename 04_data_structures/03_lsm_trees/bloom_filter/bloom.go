@@ -1,6 +1,7 @@
 package bloom
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"hash/fnv"
@@ -55,6 +56,18 @@ func (bloomFilter *MyBloomFilter) String() string {
 		}
 	}
 	return res
+}
+
+func (bloomFilter *MyBloomFilter) MarshalBinary() (data []byte, err error) {
+	buf := new(bytes.Buffer)
+	binary.Write(buf, binary.BigEndian, bloomFilter.data)
+	return buf.Bytes(), nil
+}
+
+func (bloomFilter *MyBloomFilter) UnmarshalBinary(data []byte) error {
+	buf := bytes.NewReader(data)
+	err := binary.Read(buf, binary.BigEndian, bloomFilter.data)
+	return err
 }
 
 // Produce multiple hash functions using the trick described in
