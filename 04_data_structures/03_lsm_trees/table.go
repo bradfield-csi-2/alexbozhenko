@@ -34,6 +34,9 @@ func (fE *footerEntry) write(w io.Writer) {
 }
 
 const BLOCK_SIZE = 4096 //bytes
+const KEY_LENGTH_BYTES = 4
+const VALUE_LENGTH_BYTES = 4
+const KEY_VALUE_LENGTH_BYTES = KEY_LENGTH_BYTES + VALUE_LENGTH_BYTES
 
 // Given a sorted list of key/value pairs, write them out according to the format you designed.
 func Build(filePath string, sortedItems []Item) error {
@@ -76,23 +79,26 @@ func Build(filePath string, sortedItems []Item) error {
 	// from the beginning of the file
 	for _, item := range sortedItems {
 		//	fmt.Printf("Writing key(%v):val(%v)= %v:%v\n", len(item.Key), len(item.Value), item.Key, item.Value)
-		if bytesWrittenInCurrentBlock > BLOCK_SIZE || // block already filled in
+		recordLength := len(item.Key) + len(item.Value) + KEY_VALUE_LENGTH_BYTES
+		if (bytesWrittenInCurrentBlock != 0 &&
+			bytesWrittenInCurrentBlock+recordLength > BLOCK_SIZE) || // block already filled in
 			bytesWrittenInCurrentBlock == 0 { // first block
 			fE := footerEntry{
 				key:          item.Key,
 				block_offset: uint32(dataBytesWrittenTotal),
 			}
+			//fmt.Printf("Adding footer entry %+v with %v KV pairs and %v bytes\n",
+			//	fE, kvPairsInCurrentBlock, bytesWrittenInCurrentBlock)
 			footerEntries = append(footerEntries, fE)
 			bytesWrittenInCurrentBlock = 0
 			totalBlocks++
-			//fmt.Printf("Adding footer entry %+v with %v KV pairs\n", fE, kvPairsInCurrentBlock)
 			kvPairsInCurrentBlock = 0
 		}
 		bloomFilter.Add(item.Key)
 		binary.Write(file, binary.BigEndian, uint32(len(item.Key)))
 		binary.Write(file, binary.BigEndian, uint32(len(item.Value)))
-		dataBytesWrittenTotal += 8
-		bytesWrittenInCurrentBlock += 8
+		dataBytesWrittenTotal += KEY_VALUE_LENGTH_BYTES
+		bytesWrittenInCurrentBlock += KEY_VALUE_LENGTH_BYTES
 		binary.Write(file, binary.BigEndian, *(*[]byte)(unsafe.Pointer(&item.Key)))
 		dataBytesWrittenTotal += len(item.Key)
 		bytesWrittenInCurrentBlock += len(item.Key)
@@ -203,7 +209,6 @@ func (t *Table) Get(key string) (string, bool, error) {
 	// now let's do a linear scan until we find the matching key
 	buf := make([]byte, 4)
 	f.Seek(int64(blockOffset), io.SeekStart)
-	// start of the loop
 	currentSeek, _ := f.Seek(0, io.SeekCurrent)
 	elementsSkipped := 0
 	for ; uint32(currentSeek) < t.footerStartOffset; currentSeek, _ = f.Seek(0, io.SeekCurrent) {

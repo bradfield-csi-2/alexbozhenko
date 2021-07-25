@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-const N_WORDS = 80_000_000
+const N_WORDS = 80_000
 
 // min and max are inclusive.
 func randomWord(min, max int) string {
@@ -37,7 +37,7 @@ func generateSortedItems(n int) []Item {
 	sort.Strings(keys)
 	result := make([]Item, n)
 	for i, key := range keys {
-		value := randomWord(10, 20)
+		value := randomWord(10, 4100)
 		result[i] = Item{key, value}
 	}
 	return result
