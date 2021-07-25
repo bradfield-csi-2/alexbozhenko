@@ -8,16 +8,20 @@ import (
 	"path/filepath"
 	"sort"
 	"testing"
+	"time"
 )
 
 const N_WORDS = 80_000
 
+var source = rand.NewSource(time.Now().UnixNano())
+var generator = rand.New(source)
+
 // min and max are inclusive.
 func randomWord(min, max int) string {
-	n := min + rand.Intn(max-min+1)
+	n := min + generator.Intn(max-min+1)
 	var buf bytes.Buffer
 	for i := 0; i < n; i++ {
-		c := rune(rand.Intn(26))
+		c := rune(generator.Intn(26))
 		buf.WriteRune('a' + c)
 	}
 	return buf.String()

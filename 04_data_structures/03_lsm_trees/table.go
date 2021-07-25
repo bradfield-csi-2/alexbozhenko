@@ -153,15 +153,21 @@ func LoadTable(filePath string) (*Table, error) {
 		return nil, err
 	}
 	keysToKVPairOffsets := skip_list.NewSkipListOC()
+
 	f := bufio.NewReader(file)
 	buf := make([]byte, 4)
+
 	bloomFilterEndPosition, _ := file.Seek(-12, io.SeekEnd)
+
 	io.ReadFull(f, buf)
 	bloomFilterStartPosition := binary.BigEndian.Uint32(buf)
+
 	io.ReadFull(f, buf)
 	numberOfBlocks := binary.BigEndian.Uint32(buf)
+
 	io.ReadFull(f, buf)
 	footerStartOffset := binary.BigEndian.Uint32(buf)
+
 	file.Seek(int64(footerStartOffset), io.SeekStart)
 	fmt.Printf("numberOfBlocks = %v, footerStartOffset = %v\n", numberOfBlocks, footerStartOffset)
 	for blockNumber := 0; blockNumber < int(numberOfBlocks); blockNumber++ {
@@ -205,34 +211,40 @@ func (t *Table) Get(key string) (string, bool, error) {
 	//fmt.Printf("Getting key=%v, found block offset=%v\n", key, blockOffset)
 	f := t.file
 
-	// block containing key that is less than or equal was found
+	// block containing key that is less than or equal to target key was found
 	// now let's do a linear scan until we find the matching key
-	buf := make([]byte, 4)
+	nextBlockOffset, ok := t.keysToKVPairOffsets.GetG(key)
+	if !ok { // current block is last block, just find the end of it
+		nextBlockOffset = t.footerStartOffset
+	}
+	blockSize := nextBlockOffset - blockOffset
+	block := make([]byte, blockSize)
 	f.Seek(int64(blockOffset), io.SeekStart)
-	currentSeek, _ := f.Seek(0, io.SeekCurrent)
-	elementsSkipped := 0
-	for ; uint32(currentSeek) < t.footerStartOffset; currentSeek, _ = f.Seek(0, io.SeekCurrent) {
+	io.ReadFull(f, block)
 
-		io.ReadFull(f, buf)
-		keyLength := binary.BigEndian.Uint32(buf)
-		io.ReadFull(f, buf)
-		valueLength := binary.BigEndian.Uint32(buf)
-		keyBuf := make([]byte, keyLength)
-		io.ReadFull(f, keyBuf)
-		currentKey := string(keyBuf)
+	elementsSkipped := 0
+	for len(block) > 0 {
+
+		keyLength := binary.BigEndian.Uint32(block[:4])
+		block = block[4:]
+
+		valueLength := binary.BigEndian.Uint32(block[:4])
+		block = block[4:]
+
+		currentKey := string(block[:keyLength])
+		block = block[keyLength:]
 		if currentKey == key {
 			// We found a value, return it
 			//fmt.Printf("Found a value after doing %v linear skips\n", elementsSkipped)
 
-			valueBuf := make([]byte, valueLength)
-			io.ReadFull(f, valueBuf)
-			value := string(valueBuf)
+			value := string(block[:valueLength])
 			return value, true, nil
 		} else if currentKey > key {
 			return "", false, nil
 		}
 		// keep going with linear scan
-		f.Seek(int64(valueLength), io.SeekCurrent)
+
+		block = block[valueLength:]
 		elementsSkipped++
 	}
 

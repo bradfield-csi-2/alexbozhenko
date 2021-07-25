@@ -124,6 +124,22 @@ func (skipList *SkipListOC) GetLE(key string) (uint32, bool) {
 	}
 }
 
+// Find first element that is Greater than the current
+func (skipList *SkipListOC) GetG(key string) (uint32, bool) {
+	previousNodes, node := skipList.get(key)
+	var nextNode *skipListNode
+	if node != nil {
+		nextNode = node.forward[0]
+	} else {
+		nextNode = previousNodes[0].forward[0]
+	}
+	if nextNode == nil {
+		return 0, false
+	} else {
+		return nextNode.item.Value, true
+	}
+}
+
 func (skipList *SkipListOC) Get(key string) (uint32, bool) {
 	_, node := skipList.get(key)
 	if node != nil {
