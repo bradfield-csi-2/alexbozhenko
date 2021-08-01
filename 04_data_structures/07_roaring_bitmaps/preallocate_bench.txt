@@ -1,0 +1,7 @@
+goos: linux
+goarch: amd64
+pkg: roaring_bitmaps
+cpu: AMD Ryzen 7 4800H with Radeon Graphics         
+BenchmarkBitmap-16            22        1335768456 ns/op        2147955396 B/op      460 allocs/op
+PASS
+ok      roaring_bitmaps 30.664s
