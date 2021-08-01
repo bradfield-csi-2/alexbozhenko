@@ -2,20 +2,26 @@ package table
 
 import (
 	"bytes"
+	"fmt"
 	"io/ioutil"
 	"math/rand"
-	"os"
 	"path/filepath"
 	"sort"
 	"testing"
+	"time"
 )
+
+const N_WORDS = 80_000
+
+var source = rand.NewSource(time.Now().UnixNano())
+var generator = rand.New(source)
 
 // min and max are inclusive.
 func randomWord(min, max int) string {
-	n := min + rand.Intn(max-min+1)
+	n := min + generator.Intn(max-min+1)
 	var buf bytes.Buffer
 	for i := 0; i < n; i++ {
-		c := rune(rand.Intn(26))
+		c := rune(generator.Intn(26))
 		buf.WriteRune('a' + c)
 	}
 	return buf.String()
@@ -35,7 +41,7 @@ func generateSortedItems(n int) []Item {
 	sort.Strings(keys)
 	result := make([]Item, n)
 	for i, key := range keys {
-		value := randomWord(10, 20)
+		value := randomWord(10, 4100)
 		result[i] = Item{key, value}
 	}
 	return result
@@ -46,16 +52,16 @@ func TestTable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	fmt.Println("Building in tmpdir=", dir)
 	// Clean up temp directory at end of test; you can remove this for debugging.
-	defer os.RemoveAll(dir)
+	//defer os.RemoveAll(dir)
 
 	tmpfile := filepath.Join(dir, "tmpfile")
 
-	n := 1000
-	sortedItems := generateSortedItems(n)
+	sortedItems := generateSortedItems(N_WORDS)
 
-	toInclude := sortedItems[:n/2]
-	toExclude := sortedItems[n/2:]
+	toInclude := sortedItems[:N_WORDS/2]
+	toExclude := sortedItems[N_WORDS/2:]
 
 	err = Build(tmpfile, toInclude)
 	if err != nil {
@@ -107,4 +113,26 @@ func TestTable(t *testing.T) {
 			t.Fatalf("Unexpected RangeScan result\n\nExpected: %v\n\nActual: %v", expectedScan, actualScan)
 		}
 	*/
+}
+
+func BenchmarkTable(b *testing.B) {
+
+	sortedItems := generateSortedItems(N_WORDS)
+	toInclude := sortedItems[:N_WORDS/2]
+	toExclude := sortedItems[N_WORDS/2:]
+
+	table, err := LoadTable("/home/alex/large_table")
+	if err != nil {
+		b.Fatalf("Error loading Table: %v", err)
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		for _, item := range toInclude {
+			table.Get(item.Key)
+		}
+
+		for _, item := range toExclude {
+			table.Get(item.Key)
+		}
+	}
 }
