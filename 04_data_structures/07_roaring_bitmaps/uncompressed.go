@@ -13,6 +13,13 @@ type uncompressedBitmap struct {
 var logger, _ = zap.NewProduction()
 var sugar = logger.Sugar()
 
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
 func newUncompressedBitmap() *uncompressedBitmap {
 	// Range for uint32 is [0; 2**32-1], so we need
 	// 2**32 bits, or 2**29 bytes, or 2**26 = 67108864 8-bytes blocks
@@ -46,15 +53,41 @@ func (b *uncompressedBitmap) Set(x uint32) {
 }
 
 func (b *uncompressedBitmap) Union(other *uncompressedBitmap) *uncompressedBitmap {
-	var data []uint64
+	minLength := min(len(b.data), len(other.data))
+	data := make([]uint64, minLength)
+	for i := 0; i < minLength; i++ {
+		data[i] = b.data[i] | other.data[i]
+	}
+	if len(b.data) > len(other.data) {
+		data = append(data, b.data[minLength:]...)
+	} else {
+		data = append(data, other.data[minLength:]...)
+	}
 
+	sugar.Debugw(
+		"operation",
+		"dataLen", len(data),
+		"blen", len(b.data),
+		"olen", len(other.data),
+	)
 	return &uncompressedBitmap{
 		data: data,
 	}
 }
 
 func (b *uncompressedBitmap) Intersect(other *uncompressedBitmap) *uncompressedBitmap {
-	var data []uint64
+	minLength := min(len(b.data), len(other.data))
+	data := make([]uint64, minLength)
+	for i := 0; i < minLength; i++ {
+		data[i] = b.data[i] & other.data[i]
+	}
+
+	sugar.Debugw(
+		"operation",
+		"dataLen", len(data),
+		"blen", len(b.data),
+		"olen", len(other.data),
+	)
 	return &uncompressedBitmap{
 		data: data,
 	}
