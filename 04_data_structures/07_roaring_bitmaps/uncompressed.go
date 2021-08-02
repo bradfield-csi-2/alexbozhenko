@@ -1,7 +1,11 @@
 package bitmap
 
 import (
+	"fmt"
+	"os"
+
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 const wordSize = 64
@@ -10,7 +14,23 @@ type uncompressedBitmap struct {
 	data []uint64
 }
 
-var logger, _ = zap.NewProduction()
+func (bitMap *uncompressedBitmap) String() string {
+	res := ""
+	for i, bucket := range bitMap.data {
+		if bucket != 0 {
+			res += fmt.Sprintf("bucket %v=%064b\n", i, bucket)
+		}
+	}
+	return res
+}
+
+var atom = zap.NewAtomicLevel()
+
+var logger = zap.New(zapcore.NewCore(
+	zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig()),
+	zapcore.Lock(os.Stdout),
+	atom,
+))
 var sugar = logger.Sugar()
 
 func min(a, b int) int {
@@ -32,7 +52,7 @@ func newUncompressedBitmap() *uncompressedBitmap {
 func (b *uncompressedBitmap) Get(x uint32) bool {
 	blockNumber := x / wordSize
 	dataLen := uint32(len(b.data))
-	sugar.Debugw("set", "dataLen", dataLen, "blockNumber", blockNumber)
+	//	sugar.Debugw("get", "dataLen", dataLen, "blockNumber", blockNumber)
 	if blockNumber >= dataLen {
 		return false
 	}

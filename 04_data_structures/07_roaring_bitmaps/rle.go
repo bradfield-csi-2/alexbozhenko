@@ -2,6 +2,7 @@ package bitmap
 
 import (
 	"encoding/binary"
+	"fmt"
 )
 
 // ==========
@@ -33,20 +34,20 @@ import (
 // Let's work with whole bytes instead:
 
 // 0_______
-//  ^^^^^^^ - length of followed uncompressed bytes[0;127]
+//  ^^^^^^^ - length of followed uncompressed bytes[1;127]
 // ^        - uncompressed flag
 
 // 1_______
-//   ^^^^^^ - length of the run in bytes [0;63]
+//   ^^^^^^ - length of the run in bytes [1;63]
 //  ^       - value, of the run, 0 or 1
 // ^        - compressed flag
 
 type state uint
 
 const (
-	uncompressed state = iota
-	compressed0
+	compressed0 state = iota
 	compressed1
+	uncompressed
 )
 const maxUncompressedRunLength = 127 // 7 bits
 const maxCompressedRunLength = 63    // 6 bits
@@ -65,16 +66,18 @@ func genHeaderByte(st state, runLength int) byte {
 	if st == uncompressed {
 		if runLength > maxUncompressedRunLength {
 			// TODO abozhenko for robot-dreams:
-			// If I know that runLength for uncompressed must be in range [0;127]
-			// and length for compressed byte must be in range [0;63],
+			// If I know that runLength for uncompressed must be in range [1;127]
+			// and length for compressed byte must be in range [1;63],
 			// how do I enforce these rules at compile time?
 			// In oCaml that can be solved with custom type
-			panic("BUG! run length of uncompressed bytes is encoded with just 6 bits")
+			panic(fmt.Sprintf("BUG! run length(%v) of uncompressed bytes must be encoded with just 6 bits",
+				runLength))
 		}
 		return byte(runLength)
 	}
 	if runLength > maxCompressedRunLength {
-		panic("BUG! run length of compressed bytes is encoded with just 5 bits")
+		panic(fmt.Sprintf("BUG! run length(%v) of compressed bytes must be encoded with just 5 bits",
+			runLength))
 	}
 	// TODO abozhenko for robot-dreams
 	// In ocaml, we can do pattern matching, e.g:
@@ -93,6 +96,8 @@ func genHeaderByte(st state, runLength int) byte {
 }
 
 func compress(b *uncompressedBitmap) []uint64 {
+	fmt.Printf("before compressing\n%s", b)
+	//atom.SetLevel(zap.DebugLevel)
 	compressedBytes := []byte{}
 	currentRunBytes := []byte{}
 	currentBlockBytes := make([]byte, 8)
@@ -107,8 +112,15 @@ func compress(b *uncompressedBitmap) []uint64 {
 			// Also, if we accumulated more than enough bytes in the current run,
 			// let's create a new run, with new header byte
 			if getState(b) != currentState ||
-				(currentState == uncompressed && runLength > maxUncompressedRunLength) ||
-				(currentState != uncompressed && runLength > maxCompressedRunLength) {
+				(currentState == uncompressed && runLength >= maxUncompressedRunLength) ||
+				(currentState != uncompressed && runLength >= maxCompressedRunLength) {
+
+				sugar.Debugw(
+					"Detected new run",
+					"previous runLength", runLength,
+					"previous state", currentState,
+					"new state", getState(b),
+				)
 				compressedBytes = append(compressedBytes,
 					genHeaderByte(currentState, int(runLength)))
 				compressedBytes = append(compressedBytes, currentRunBytes...)
@@ -125,17 +137,90 @@ func compress(b *uncompressedBitmap) []uint64 {
 	compressedBytes = append(compressedBytes, currentRunBytes...)
 
 	// append 0-bytes to align to uint64
+	sugar.Debugw(
+		"before adding 0-bytes to align to uint64",
+		"adding zero bytes: ", len(compressedBytes)%8,
+	)
 	compressedBytes = append(compressedBytes, make([]byte, len(compressedBytes)%8)...)
 	compressedData := make([]uint64, len(compressedBytes)/8)
 	for i := range compressedData {
 		compressedData[i] = binary.BigEndian.Uint64(compressedBytes[8*i : 8*i+8])
 	}
+	sugar.Debugw(
+		"Finished compression",
+		"compressed len",
+		len(compressedData),
+		"uncompressed len",
+		len(b.data),
+	)
 
 	return compressedData
 }
 
+func parseCompressedHeader(header byte) (st state, runLength uint8) {
+	compressedMark := header & (1 << 7)
+	if compressedMark != 0 {
+		st = state((header & (1 << 6)) >> 6)
+	} else {
+		st = uncompressed
+	}
+	if st == uncompressed {
+		runLength = uint8(header & 0b01111111)
+	} else {
+		runLength = uint8(header & 0b00111111)
+	}
+	return
+}
+
 func decompress(compressed []uint64) *uncompressedBitmap {
-	var data []uint64
+
+	fmt.Printf("before decompressing, here is compressed data:\n%s", &uncompressedBitmap{
+		data: compressed,
+	})
+	compressedBytesBuffer := make([]byte, 8)
+	uncompressedBytes := []byte{}
+	var runLength uint8 = 0
+	var byteToAppend byte
+	var st state
+	for _, block := range compressed {
+		binary.BigEndian.PutUint64(compressedBytesBuffer, block)
+		for _, b := range compressedBytesBuffer {
+			// runLength == 0 means that we are at the header byte
+			if runLength == 0 {
+				if b == 0 {
+					// if we reached zero-bytes we had added to the end
+					// to align to uint64, we need to stop processing
+					break
+				}
+				st, runLength = parseCompressedHeader(b)
+			} else {
+				if st == uncompressed {
+					uncompressedBytes = append(uncompressedBytes, b)
+					runLength--
+				} else {
+					if st == compressed0 {
+						byteToAppend = 0b0
+					} else {
+						byteToAppend = 0b11111111
+					}
+					for i := uint8(0); i < runLength; i++ {
+						uncompressedBytes = append(uncompressedBytes, byteToAppend)
+					}
+					runLength = 0
+				}
+
+			}
+		}
+	}
+	data := make([]uint64, len(uncompressedBytes)/8)
+	for i := range data {
+		data[i] = binary.BigEndian.Uint64(uncompressedBytes[8*i : 8*i+8])
+	}
+
+	fmt.Printf("after decompressing\n%s", &uncompressedBitmap{
+		data: data,
+	})
+
 	return &uncompressedBitmap{
 		data: data,
 	}
