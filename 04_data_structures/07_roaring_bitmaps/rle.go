@@ -1,6 +1,8 @@
 package bitmap
 
-import "encoding/binary"
+import (
+	"encoding/binary"
+)
 
 // ==========
 // First idea
@@ -21,7 +23,7 @@ import "encoding/binary"
 //  ^^^^^^  - length of the run, starting from 2^3 to to 2^9 - 1 = 511
 // ^        - compressed byte flag
 
-// Disadvatages:
+// Disadvantages:
 // annoying to work with individual bits
 //
 
@@ -46,6 +48,8 @@ const (
 	compressed0
 	compressed1
 )
+const maxUncompressedRunLength = 127 // 7 bits
+const maxCompressedRunLength = 63    // 6 bits
 
 func getState(b byte) state {
 	if b == 0x00 {
@@ -59,7 +63,7 @@ func getState(b byte) state {
 
 func genHeaderByte(st state, runLength int) byte {
 	if st == uncompressed {
-		if runLength > 127 {
+		if runLength > maxUncompressedRunLength {
 			// TODO abozhenko for robot-dreams:
 			// If I know that runLength for uncompressed must be in range [0;127]
 			// and length for compressed byte must be in range [0;63],
@@ -69,7 +73,7 @@ func genHeaderByte(st state, runLength int) byte {
 		}
 		return byte(runLength)
 	}
-	if runLength > 63 {
+	if runLength > maxCompressedRunLength {
 		panic("BUG! run length of compressed bytes is encoded with just 5 bits")
 	}
 	// TODO abozhenko for robot-dreams
@@ -82,36 +86,51 @@ func genHeaderByte(st state, runLength int) byte {
 	// How to do something like this in go, to make the code more bulletproof
 	// against future modifications like this?
 	if st == compressed0 {
-		return byte(runLength) & (0b1 << 7)
+		return byte(runLength) | (0b1 << 7)
 	} else {
-		return byte(runLength) & (0b11 << 6)
+		return byte(runLength) | (0b11 << 6)
 	}
 }
 
 func compress(b *uncompressedBitmap) []uint64 {
-	compressedData := []byte{}
-	currentRunData := []byte{}
+	compressedBytes := []byte{}
+	currentRunBytes := []byte{}
 	currentBlockBytes := make([]byte, 8)
 	var runLength uint8 = 0 // length of consequent bytes of the same type
 	currentState := uncompressed
 	for _, block := range b.data {
 		binary.BigEndian.PutUint64(currentBlockBytes, block)
 		for _, b := range currentBlockBytes {
-			// what if tooo long?
-			if getState(b) != currentState {
-
-				// zapisat header
-				// nuzhno zapisat
+			// When current byte type differs from the previous one,
+			// that means end of the run, so we need to write the header byte,
+			// followed by the bytes of the run itself.
+			// Also, if we accumulated more than enough bytes in the current run,
+			// let's create a new run, with new header byte
+			if getState(b) != currentState ||
+				(currentState == uncompressed && runLength > maxUncompressedRunLength) ||
+				(currentState != uncompressed && runLength > maxCompressedRunLength) {
+				compressedBytes = append(compressedBytes,
+					genHeaderByte(currentState, int(runLength)))
+				compressedBytes = append(compressedBytes, currentRunBytes...)
+				currentRunBytes = []byte{}
 				currentState = getState(b)
-				runLength = 1
-
+				runLength = 0
 			}
 			runLength++
-			currentRunData := append(currentRunData, b)
-
+			currentRunBytes = append(currentRunBytes, b)
 		}
 	}
-	// zapisat
+	compressedBytes = append(compressedBytes,
+		genHeaderByte(currentState, int(runLength)))
+	compressedBytes = append(compressedBytes, currentRunBytes...)
+
+	// append 0-bytes to align to uint64
+	compressedBytes = append(compressedBytes, make([]byte, len(compressedBytes)%8)...)
+	compressedData := make([]uint64, len(compressedBytes)/8)
+	for i := range compressedData {
+		compressedData[i] = binary.BigEndian.Uint64(compressedBytes[8*i : 8*i+8])
+	}
+
 	return compressedData
 }
 
