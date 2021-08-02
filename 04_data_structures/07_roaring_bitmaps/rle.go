@@ -99,6 +99,7 @@ func genHeaderByte(st state, runLength uint8) byte {
 }
 
 func compress(b *uncompressedBitmap) []uint64 {
+	//atom.SetLevel(zapcore.DebugLevel)
 	compressedBytes := []byte{}
 	currentRunBytes := []byte{}
 	currentBlockBytes := make([]byte, 8)
@@ -143,9 +144,12 @@ func compress(b *uncompressedBitmap) []uint64 {
 	// append 0-bytes to align to uint64
 	sugar.Debugw(
 		"before adding 0-bytes to align to uint64",
+		"len was", len(compressedBytes),
+		"len/8", len(compressedBytes)/8,
+		"len%8", len(compressedBytes)%8,
 		"adding zero bytes: ", len(compressedBytes)%8,
 	)
-	compressedBytes = append(compressedBytes, make([]byte, len(compressedBytes)%8)...)
+	compressedBytes = append(compressedBytes, make([]byte, 8-len(compressedBytes)%8)...)
 	compressedData := make([]uint64, len(compressedBytes)/8)
 	for i := range compressedData {
 		compressedData[i] = binary.BigEndian.Uint64(compressedBytes[8*i : 8*i+8])
