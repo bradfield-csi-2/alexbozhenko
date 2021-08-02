@@ -12,7 +12,8 @@ const (
 )
 
 func TestBitmap(b *testing.T) {
-	//	for benchNumber := 0; benchNumber < b.N; benchNumber++ {
+	//func BenchmarkBitmap(b *testing.B) {
+	//for benchNumber := 0; benchNumber < b.N; benchNumber++ {
 	b1 := newUncompressedBitmap()
 	m1 := make(map[uint32]struct{})
 
@@ -62,5 +63,5 @@ func TestBitmap(b *testing.T) {
 			b.Fatalf("Compression then decompression produced inconsistent result for %d\n", x)
 		}
 	}
-	//}
+	//	}
 }

@@ -62,7 +62,10 @@ func getState(b byte) state {
 	return uncompressed
 }
 
-func genHeaderByte(st state, runLength int) byte {
+func genHeaderByte(st state, runLength uint8) byte {
+	if runLength == 0 {
+		panic("BUG! run length must be non-zero to produce valid encoding")
+	}
 	if st == uncompressed {
 		if runLength > maxUncompressedRunLength {
 			// TODO abozhenko for robot-dreams:
@@ -96,8 +99,6 @@ func genHeaderByte(st state, runLength int) byte {
 }
 
 func compress(b *uncompressedBitmap) []uint64 {
-	fmt.Printf("before compressing\n%s", b)
-	//atom.SetLevel(zap.DebugLevel)
 	compressedBytes := []byte{}
 	currentRunBytes := []byte{}
 	currentBlockBytes := make([]byte, 8)
@@ -111,7 +112,7 @@ func compress(b *uncompressedBitmap) []uint64 {
 			// followed by the bytes of the run itself.
 			// Also, if we accumulated more than enough bytes in the current run,
 			// let's create a new run, with new header byte
-			if getState(b) != currentState ||
+			if getState(b) != currentState && runLength > 0 ||
 				(currentState == uncompressed && runLength >= maxUncompressedRunLength) ||
 				(currentState != uncompressed && runLength >= maxCompressedRunLength) {
 
@@ -120,20 +121,23 @@ func compress(b *uncompressedBitmap) []uint64 {
 					"previous runLength", runLength,
 					"previous state", currentState,
 					"new state", getState(b),
+					"len compressedBytes", len(compressedBytes),
 				)
 				compressedBytes = append(compressedBytes,
-					genHeaderByte(currentState, int(runLength)))
+					genHeaderByte(currentState, runLength))
 				compressedBytes = append(compressedBytes, currentRunBytes...)
 				currentRunBytes = []byte{}
 				currentState = getState(b)
 				runLength = 0
 			}
 			runLength++
-			currentRunBytes = append(currentRunBytes, b)
+			if currentState == uncompressed {
+				currentRunBytes = append(currentRunBytes, b)
+			}
 		}
 	}
 	compressedBytes = append(compressedBytes,
-		genHeaderByte(currentState, int(runLength)))
+		genHeaderByte(currentState, runLength))
 	compressedBytes = append(compressedBytes, currentRunBytes...)
 
 	// append 0-bytes to align to uint64
@@ -174,9 +178,6 @@ func parseCompressedHeader(header byte) (st state, runLength uint8) {
 
 func decompress(compressed []uint64) *uncompressedBitmap {
 
-	fmt.Printf("before decompressing, here is compressed data:\n%s", &uncompressedBitmap{
-		data: compressed,
-	})
 	compressedBytesBuffer := make([]byte, 8)
 	uncompressedBytes := []byte{}
 	var runLength uint8 = 0
@@ -193,22 +194,23 @@ func decompress(compressed []uint64) *uncompressedBitmap {
 					break
 				}
 				st, runLength = parseCompressedHeader(b)
-			} else {
 				if st == uncompressed {
-					uncompressedBytes = append(uncompressedBytes, b)
-					runLength--
-				} else {
-					if st == compressed0 {
-						byteToAppend = 0b0
-					} else {
-						byteToAppend = 0b11111111
-					}
-					for i := uint8(0); i < runLength; i++ {
-						uncompressedBytes = append(uncompressedBytes, byteToAppend)
-					}
-					runLength = 0
+					continue
 				}
-
+			}
+			if st == uncompressed {
+				uncompressedBytes = append(uncompressedBytes, b)
+				runLength--
+			} else {
+				if st == compressed0 {
+					byteToAppend = 0b00000000
+				} else {
+					byteToAppend = 0b11111111
+				}
+				for i := uint8(0); i < runLength; i++ {
+					uncompressedBytes = append(uncompressedBytes, byteToAppend)
+				}
+				runLength = 0
 			}
 		}
 	}
@@ -216,10 +218,6 @@ func decompress(compressed []uint64) *uncompressedBitmap {
 	for i := range data {
 		data[i] = binary.BigEndian.Uint64(uncompressedBytes[8*i : 8*i+8])
 	}
-
-	fmt.Printf("after decompressing\n%s", &uncompressedBitmap{
-		data: data,
-	})
 
 	return &uncompressedBitmap{
 		data: data,

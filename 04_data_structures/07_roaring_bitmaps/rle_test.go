@@ -5,43 +5,43 @@ import "testing"
 func Test_genHeaderByte(t *testing.T) {
 	type args struct {
 		st        state
-		runLength int
+		runLength uint8
 	}
 	tests := []struct {
 		name string
 		args args
 		want byte
 	}{
-		{name: "uncompressed, 0 length",
+		{name: "uncompressed, 1 length",
 			args: args{
 				st:        uncompressed,
-				runLength: 0,
+				runLength: 1,
 			},
-			want: 0b00000000},
+			want: 0b00000001},
 		{name: "uncompressed, 127 length",
 			args: args{
 				st:        uncompressed,
 				runLength: 127,
 			},
 			want: 0b01111111},
-		{name: "compressed0, 0 length",
+		{name: "compressed0, 1 length",
 			args: args{
 				st:        compressed0,
-				runLength: 0,
+				runLength: 1,
 			},
-			want: 0b10000000},
+			want: 0b10000001},
 		{name: "compressed0, 63 length",
 			args: args{
 				st:        compressed0,
 				runLength: 63,
 			},
 			want: 0b10111111},
-		{name: "compressed1, 0 length",
+		{name: "compressed1, 1 length",
 			args: args{
 				st:        compressed1,
-				runLength: 0,
+				runLength: 1,
 			},
-			want: 0b11000000},
+			want: 0b11000001},
 		{name: "compressed1, 63 length",
 			args: args{
 				st:        compressed1,

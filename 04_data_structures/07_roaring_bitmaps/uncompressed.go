@@ -18,7 +18,7 @@ func (bitMap *uncompressedBitmap) String() string {
 	res := ""
 	for i, bucket := range bitMap.data {
 		if bucket != 0 {
-			res += fmt.Sprintf("bucket %v=%064b\n", i, bucket)
+			res += fmt.Sprintf("bucket %7d=%064b\n", i, bucket)
 		}
 	}
 	return res
