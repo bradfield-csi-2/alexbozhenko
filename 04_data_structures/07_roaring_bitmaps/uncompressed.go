@@ -41,10 +41,18 @@ func min(a, b int) int {
 }
 
 func newUncompressedBitmap() *uncompressedBitmap {
-	// Range for uint32 is [0; 2**32-1], so we need
-	// 2**32 bits, or 2**29 bytes, or 2**26 = 67108864 8-bytes blocks
 	return &uncompressedBitmap{
 		data: []uint64{},
+		// TODO abozhenko for robot-dreams:
+		// Do you recommend to pre-allocate memory for the entire range, like in the
+		// commented line below, or allocate it as needed on the go, like it is
+		// implemented now?
+		// With existing tests pre-allocation was slower, but I guess that depends on
+		// the data set. Values that we insert are far from the maxint, so we waste
+		// time allocting zeros that we will never use.
+
+		// Range for uint32 is [0; 2**32-1], so we need
+		// 2**32 bits, or 2**29 bytes, or 2**26 = 67108864 8-bytes blocks
 		//	data: make([]uint64, 1<<26),
 	}
 }
@@ -52,7 +60,7 @@ func newUncompressedBitmap() *uncompressedBitmap {
 func (b *uncompressedBitmap) Get(x uint32) bool {
 	blockNumber := x / wordSize
 	dataLen := uint32(len(b.data))
-	//	sugar.Debugw("get", "dataLen", dataLen, "blockNumber", blockNumber)
+	sugar.Debugw("get", "dataLen", dataLen, "blockNumber", blockNumber)
 	if blockNumber >= dataLen {
 		return false
 	}
@@ -83,7 +91,6 @@ func (b *uncompressedBitmap) Union(other *uncompressedBitmap) *uncompressedBitma
 	} else {
 		data = append(data, other.data[minLength:]...)
 	}
-
 	sugar.Debugw(
 		"operation",
 		"dataLen", len(data),

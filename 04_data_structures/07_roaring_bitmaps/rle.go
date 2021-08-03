@@ -42,17 +42,17 @@ import (
 //  ^       - value, of the run, 0 or 1
 // ^        - compressed flag
 
-type state uint
+type byteType uint
 
 const (
-	compressed0 state = iota
+	compressed0 byteType = iota
 	compressed1
 	uncompressed
 )
 const maxUncompressedRunLength = 127 // 7 bits
 const maxCompressedRunLength = 63    // 6 bits
 
-func getState(b byte) state {
+func getByteType(b byte) byteType {
 	if b == 0x00 {
 		return compressed0
 	}
@@ -62,7 +62,7 @@ func getState(b byte) state {
 	return uncompressed
 }
 
-func genHeaderByte(st state, runLength uint8) byte {
+func genHeaderByte(st byteType, runLength uint8) byte {
 	if runLength == 0 {
 		panic("BUG! run length must be non-zero to produce valid encoding")
 	}
@@ -101,10 +101,13 @@ func genHeaderByte(st state, runLength uint8) byte {
 func compress(b *uncompressedBitmap) []uint64 {
 	//atom.SetLevel(zapcore.DebugLevel)
 	compressedBytes := []byte{}
-	currentRunBytes := []byte{}
+	uncompressedRunBytes := []byte{}
 	currentBlockBytes := make([]byte, 8)
 	var runLength uint8 = 0 // length of consequent bytes of the same type
-	currentState := uncompressed
+	currentByteType := uncompressed
+
+	// TODO abozhenko for robot-dreams:
+	// Is there a better way to turn []uint64 into bytes to iterate over?
 	for _, block := range b.data {
 		binary.BigEndian.PutUint64(currentBlockBytes, block)
 		for _, b := range currentBlockBytes {
@@ -113,35 +116,34 @@ func compress(b *uncompressedBitmap) []uint64 {
 			// followed by the bytes of the run itself.
 			// Also, if we accumulated more than enough bytes in the current run,
 			// let's create a new run, with new header byte
-			if getState(b) != currentState && runLength > 0 ||
-				(currentState == uncompressed && runLength >= maxUncompressedRunLength) ||
-				(currentState != uncompressed && runLength >= maxCompressedRunLength) {
+			if getByteType(b) != currentByteType && runLength > 0 ||
+				(currentByteType == uncompressed && runLength >= maxUncompressedRunLength) ||
+				(currentByteType != uncompressed && runLength >= maxCompressedRunLength) {
 
 				sugar.Debugw(
 					"Detected new run",
 					"previous runLength", runLength,
-					"previous state", currentState,
-					"new state", getState(b),
+					"previous state", currentByteType,
+					"new state", getByteType(b),
 					"len compressedBytes", len(compressedBytes),
 				)
 				compressedBytes = append(compressedBytes,
-					genHeaderByte(currentState, runLength))
-				compressedBytes = append(compressedBytes, currentRunBytes...)
-				currentRunBytes = []byte{}
-				currentState = getState(b)
+					genHeaderByte(currentByteType, runLength))
+				compressedBytes = append(compressedBytes, uncompressedRunBytes...)
+				uncompressedRunBytes = []byte{}
+				currentByteType = getByteType(b)
 				runLength = 0
 			}
 			runLength++
-			if currentState == uncompressed {
-				currentRunBytes = append(currentRunBytes, b)
+			if currentByteType == uncompressed {
+				uncompressedRunBytes = append(uncompressedRunBytes, b)
 			}
 		}
 	}
 	compressedBytes = append(compressedBytes,
-		genHeaderByte(currentState, runLength))
-	compressedBytes = append(compressedBytes, currentRunBytes...)
+		genHeaderByte(currentByteType, runLength))
+	compressedBytes = append(compressedBytes, uncompressedRunBytes...)
 
-	// append 0-bytes to align to uint64
 	sugar.Debugw(
 		"before adding 0-bytes to align to uint64",
 		"len was", len(compressedBytes),
@@ -149,6 +151,7 @@ func compress(b *uncompressedBitmap) []uint64 {
 		"len%8", len(compressedBytes)%8,
 		"adding zero bytes: ", len(compressedBytes)%8,
 	)
+	// append 0-bytes to align to uint64
 	compressedBytes = append(compressedBytes, make([]byte, 8-len(compressedBytes)%8)...)
 	compressedData := make([]uint64, len(compressedBytes)/8)
 	for i := range compressedData {
@@ -165,10 +168,10 @@ func compress(b *uncompressedBitmap) []uint64 {
 	return compressedData
 }
 
-func parseCompressedHeader(header byte) (st state, runLength uint8) {
+func parseCompressedHeader(header byte) (st byteType, runLength uint8) {
 	compressedMark := header & (1 << 7)
 	if compressedMark != 0 {
-		st = state((header & (1 << 6)) >> 6)
+		st = byteType((header & (1 << 6)) >> 6)
 	} else {
 		st = uncompressed
 	}
@@ -186,35 +189,36 @@ func decompress(compressed []uint64) *uncompressedBitmap {
 	uncompressedBytes := []byte{}
 	var runLength uint8 = 0
 	var byteToAppend byte
-	var st state
+	var bytetype byteType
 	for _, block := range compressed {
 		binary.BigEndian.PutUint64(compressedBytesBuffer, block)
 		for _, b := range compressedBytesBuffer {
-			// runLength == 0 means that we are at the header byte
-			if runLength == 0 {
+			if runLength == 0 { // header byte
 				if b == 0 {
-					// if we reached zero-bytes we had added to the end
-					// to align to uint64, we need to stop processing
+					// stop when we reached zero-bytes added for padding at the end
 					break
 				}
-				st, runLength = parseCompressedHeader(b)
-				if st == uncompressed {
-					continue
+				bytetype, runLength = parseCompressedHeader(b)
+				// if bytetype == uncompressed runLength will show
+				// number of remaining following uncompressed bytes
+				// we need to read as is
+				if bytetype != uncompressed {
+					if bytetype == compressed0 {
+						byteToAppend = 0b00000000
+					} else {
+						byteToAppend = 0b11111111
+					}
+					for i := uint8(0); i < runLength; i++ {
+						uncompressedBytes = append(uncompressedBytes, byteToAppend)
+					}
+					// because no uncompressed bytes follow compressed byte header,
+					// we know that next byte is another header, so set runLength=0
+					// to parse it on the next iteration
+					runLength = 0
 				}
-			}
-			if st == uncompressed {
+			} else { // runLength != 0 means we are at uncompressed byte
 				uncompressedBytes = append(uncompressedBytes, b)
 				runLength--
-			} else {
-				if st == compressed0 {
-					byteToAppend = 0b00000000
-				} else {
-					byteToAppend = 0b11111111
-				}
-				for i := uint8(0); i < runLength; i++ {
-					uncompressedBytes = append(uncompressedBytes, byteToAppend)
-				}
-				runLength = 0
 			}
 		}
 	}

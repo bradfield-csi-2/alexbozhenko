@@ -4,7 +4,7 @@ import "testing"
 
 func Test_genHeaderByte(t *testing.T) {
 	type args struct {
-		st        state
+		st        byteType
 		runLength uint8
 	}
 	tests := []struct {
