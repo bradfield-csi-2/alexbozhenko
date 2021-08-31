@@ -11,7 +11,7 @@
 #include <string.h>
 #include "types.h"
 
-int START = 23000000, END = 23000500;
+int START = 2300000, END = 24000500;
 char *TESTS[] = {"brute_force", "brutish", "miller_rabin"};
 int num_tests = sizeof(TESTS) / sizeof(char *);
 
@@ -32,7 +32,6 @@ int main(void)
   long n;
   pid_t pid;
   int CPU_CORES = get_nprocs();
-  CPU_CORES = 1;
 
   struct mq_attr attr;
 
@@ -89,22 +88,29 @@ int main(void)
     }
   }
 
-  // for each number, run each test
-  for (n = START; n <= END; n++)
-  {
-    for (int i = 0; i < NUM_ALGORITHMS; i++)
-    {
-      struct request req = {.number = n, .alg = i};
+  pid = fork();
 
-      mq_send(request_queue, (const char *)&req,
-              sizeof(req), (unsigned int)0);
-      printf("Enqueued %ld with %15s\n",
-             req.number,
-             ALGORITHMS_STRING[req.alg]);
+  if (pid == 0)
+  {
+    // we are the child
+    // for each number, run each test
+    for (n = START; n <= END; n++)
+    {
+      for (int i = 0; i < NUM_ALGORITHMS; i++)
+      {
+        struct request req = {.number = n, .alg = i};
+
+        mq_send(request_queue, (const char *)&req,
+                sizeof(req), (unsigned int)0);
+        //printf("Enqueued %ld with %15s\n", req.number, ALGORITHMS_STRING[req.alg]);
+      }
     }
+    // Child done all the enqueuing, it should finish here!
+    exit(EXIT_SUCCESS);
   }
+
   struct response resp;
-  for (int i = 0; i <= NUM_ALGORITHMS * (END - START + 1); i++)
+  for (int i = 0; i <= NUM_ALGORITHMS * (END - START); i++)
   {
     mq_receive(response_queue, (char *)&resp,
                sizeof(struct response), (unsigned int)0);
@@ -114,4 +120,8 @@ int main(void)
            resp.result ? "is" : "IS NOT",
            resp.duration);
   }
+  fflush(stdout);
+
+  // Killing, to terminate children, since we set  PR_SET_PDEATHSIG
+  raise(SIGTERM);
 }

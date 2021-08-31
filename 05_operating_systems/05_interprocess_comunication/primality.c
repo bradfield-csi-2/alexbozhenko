@@ -140,9 +140,9 @@ bool brutish_impl(long n)
 
 int randint(int a, int b) { return rand() % (++b - a) + a; }
 
-int modpow(int a, int d, int m)
+long modpow(long a, long d, long m)
 {
-  int c = a;
+  long c = a;
   for (int i = 1; i < d; i++)
     c = (c * a) % m;
   return c % m;
@@ -150,7 +150,7 @@ int modpow(int a, int d, int m)
 
 int witness(int a, int s, int d, int n)
 {
-  int x = modpow(a, d, n);
+  long x = modpow(a, d, n);
   if (x == 1)
     return 1;
   for (int i = 0; i < s - 1; i++)
