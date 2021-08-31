@@ -8,12 +8,14 @@ int brute_force(long n);
 int brutish(long n);
 int miller_rabin(long n);
 
-void exit_with_usage() {
+void exit_with_usage()
+{
   fprintf(stderr, "Usage: ./primality [brute_force|brutish|miller_rabin]\n");
   exit(1);
 }
 
-int main(int argc, char*argv[]) {
+int main(int argc, char *argv[])
+{
   long num;
   int (*func)(long), tty;
 
@@ -31,20 +33,25 @@ int main(int argc, char*argv[]) {
 
   tty = isatty(fileno(stdin));
 
-  if (tty) {
-
+  if (tty)
+  {
     fprintf(stderr, "Running \"%s\", enter a number:\n> ", argv[1]);
 
-    while (scanf("%ld", &num) == 1) {
+    while (scanf("%ld", &num) == 1)
+    {
       printf("%d\n", (*func)(num));
       fflush(stdout);
       fprintf(stderr, "> ");
     }
-  } else {
-    for (;;) {
-      read(STDIN_FILENO, &num, sizeof(num));
+  }
+  else
+  {
+    int elements_read;
+
+    while ((elements_read = scanf("%ld", &num)) != EOF && elements_read == 1)
+    {
       int result = (*func)(num);
-      write(STDOUT_FILENO, &result, sizeof(result));
+      fprintf(stdout, "%ld\n", result);
     }
   }
 }
@@ -54,7 +61,8 @@ int main(int argc, char*argv[]) {
  */
 
 // Just test every factor
-int brute_force(long n) {
+int brute_force(long n)
+{
   for (long i = 2; i < n; i++)
     if (n % i == 0)
       return 0;
@@ -62,7 +70,8 @@ int brute_force(long n) {
 }
 
 // Test factors, up to sqrt(n)
-int brutish(long n) {
+int brutish(long n)
+{
   long max = floor(sqrt(n));
   for (long i = 2; i <= max; i++)
     if (n % i == 0)
@@ -72,18 +81,21 @@ int brutish(long n) {
 
 int randint(int a, int b) { return rand() % (++b - a) + a; }
 
-int modpow(int a, int d, int m) {
+int modpow(int a, int d, int m)
+{
   int c = a;
   for (int i = 1; i < d; i++)
     c = (c * a) % m;
   return c % m;
 }
 
-int witness(int a, int s, int d, int n) {
+int witness(int a, int s, int d, int n)
+{
   int x = modpow(a, d, n);
   if (x == 1)
     return 1;
-  for (int i = 0; i < s - 1; i++) {
+  for (int i = 0; i < s - 1; i++)
+  {
     if (x == n - 1)
       return 1;
     x = modpow(x, 2, n);
@@ -95,7 +107,8 @@ int witness(int a, int s, int d, int n) {
 int MILLER_RABIN_ITERATIONS = 10;
 
 // An implementation of the probabilistic Miller-Rabin test
-int miller_rabin(long n) {
+int miller_rabin(long n)
+{
   int a, s = 0, d = n - 1;
 
   if (n == 2)
@@ -104,11 +117,13 @@ int miller_rabin(long n) {
   if (!(n & 1) || n <= 1)
     return 0;
 
-  while (!(d & 1)) {
+  while (!(d & 1))
+  {
     d >>= 1;
     s += 1;
   }
-  for (int i = 0; i < MILLER_RABIN_ITERATIONS; i++) {
+  for (int i = 0; i < MILLER_RABIN_ITERATIONS; i++)
+  {
     a = randint(2, n - 1);
     if (!witness(a, s, d, n))
       return 0;
