@@ -39,6 +39,7 @@
                 // dnf install libubsan.x86_64
                 "-fsanitize=undefined",
                 "-lm", //lib math
+                "-lrt", // real time lib for posix message queues
                 "-std=gnu18",
                 "-ggdb3",
                 "${file}",

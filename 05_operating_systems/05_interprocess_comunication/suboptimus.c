@@ -10,6 +10,17 @@ int START = 2, END = 20;
 char *TESTS[] = {"brute_force", "brutish", "miller_rabin"};
 int num_tests = sizeof(TESTS) / sizeof(char *);
 
+// PLAN:
+// 1. create queues in suboptimus
+// 2. create request message with request for each algorithm, for each
+//    number in the range of numbers
+// 3. send messages to request queue
+// 4. fork and exec N primality.exe workers, where N=number of cpu cores
+// 5. receive request messages in primality.exe
+// 6. run primality algorithm and publish result to response queue in primality.exe
+// 7. receive response messages in suboptimus.exes
+// 8. (optionally sort before printing) print results
+
 int main(void)
 {
   int testfds[num_tests][2];
