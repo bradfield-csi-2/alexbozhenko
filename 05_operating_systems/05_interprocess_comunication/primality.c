@@ -21,7 +21,7 @@ __attribute__((__noreturn__)) void exit_with_usage(void)
 int main(int argc, char *argv[])
 {
   long num;
-  bool (*func)(long), tty;
+  bool (*func)(long), tty, result;
 
   if (argc == 2) // console mode
   {
@@ -53,7 +53,7 @@ int main(int argc, char *argv[])
 
       while ((elements_read = scanf("%ld", &num)) != EOF && elements_read == 1)
       {
-        bool result = (*func)(num);
+        result = (*func)(num);
         fprintf(stdout, "%d\n", result);
       }
     }
@@ -75,16 +75,15 @@ int main(int argc, char *argv[])
       exit(EXIT_FAILURE);
     }
 
-    struct request *req = calloc(1, sizeof(struct request));
-    struct response *resp = calloc(1, sizeof(struct response));
+    struct request req;
+    struct response resp;
 
     while (true)
     {
-      mq_receive(request_queue, (char *)req,
+      mq_receive(request_queue, (char *)&req,
                  sizeof(struct request), (unsigned int)0);
-      printf("received request for %ld with alg %s", req->number,
-             ALGORITHMS_STRING[req->alg]);
-      switch (req->alg)
+      //  printf("received request for %ld with alg %s\n", req.number,             ALGORITHMS_STRING[req.alg]);
+      switch (req.alg)
       {
       case brute_force:
         func = &brute_force_impl;
@@ -100,15 +99,15 @@ int main(int argc, char *argv[])
         exit(-1);
       }
       clock_t begin = clock();
-      bool result = (*func)(num);
+      result = (*func)(req.number);
       clock_t end = clock();
       double time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
 
-      resp->alg = req->alg;
-      resp->number = req->number;
-      resp->result = result;
-      resp->duration = time_spent;
-      mq_send(response_queue, (const char *)resp,
+      resp.alg = req.alg;
+      resp.number = req.number;
+      resp.result = result;
+      resp.duration = time_spent;
+      mq_send(response_queue, (const char *)&resp,
               sizeof(struct response), (unsigned int)0);
     }
   }
@@ -133,7 +132,9 @@ bool brutish_impl(long n)
   long max = (long)floor(sqrt((double)n));
   for (long i = 2; i <= max; i++)
     if (n % i == 0)
+    {
       return 0;
+    }
   return 1;
 }
 

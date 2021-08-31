@@ -11,7 +11,7 @@
 #include <string.h>
 #include "types.h"
 
-int START = 2, END = 20;
+int START = 23000000, END = 23000500;
 char *TESTS[] = {"brute_force", "brutish", "miller_rabin"};
 int num_tests = sizeof(TESTS) / sizeof(char *);
 
@@ -49,7 +49,7 @@ int main(void)
   // prlimit --nofile=20000 ./suboptimus.exe
   attr.mq_flags = 0;
   attr.mq_maxmsg = 1000;
-  attr.mq_msgsize = 100;
+  attr.mq_msgsize = sizeof(struct request);
   attr.mq_curmsgs = 0;
 
   mqd_t request_queue = mq_open(request_queue_name, O_RDWR | O_CREAT,
@@ -59,6 +59,7 @@ int main(void)
     printf("%s\n", strerror(errno));
     exit(EXIT_FAILURE);
   }
+  attr.mq_msgsize = sizeof(struct response);
   mqd_t response_queue = mq_open(response_queue_name, O_RDWR | O_CREAT,
                                  0644, &attr);
 
@@ -71,6 +72,8 @@ int main(void)
   for (int i = 0; i < CPU_CORES; i++)
   {
     pid = fork();
+    //TODO: undisable fork
+    //pid = 1;
 
     if (pid == -1)
     {
@@ -92,6 +95,7 @@ int main(void)
     for (int i = 0; i < NUM_ALGORITHMS; i++)
     {
       struct request req = {.number = n, .alg = i};
+
       mq_send(request_queue, (const char *)&req,
               sizeof(req), (unsigned int)0);
       printf("Enqueued %ld with %15s\n",
@@ -99,15 +103,15 @@ int main(void)
              ALGORITHMS_STRING[req.alg]);
     }
   }
-  struct response *resp = calloc(1, sizeof(struct response));
+  struct response resp;
   for (int i = 0; i <= NUM_ALGORITHMS * (END - START + 1); i++)
   {
-    mq_receive(response_queue, (char *)resp,
+    mq_receive(response_queue, (char *)&resp,
                sizeof(struct response), (unsigned int)0);
-    printf("%15s says %ld %s prime. Took %2.2e s.\n",
-           ALGORITHMS_STRING[resp->alg],
-           resp->number,
-           resp->result ? "is" : "IS NOT",
-           resp->duration);
+    printf("%15s says %ld %s prime. Took %2.10f s.\n",
+           ALGORITHMS_STRING[resp.alg],
+           resp.number,
+           resp.result ? "is" : "IS NOT",
+           resp.duration);
   }
 }
