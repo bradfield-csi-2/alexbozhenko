@@ -4,12 +4,13 @@
 #include <stdlib.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include "types.h"
 
 int START = 2, END = 20;
 char *TESTS[] = {"brute_force", "brutish", "miller_rabin"};
 int num_tests = sizeof(TESTS) / sizeof(char *);
 
-int main(int argc, char *argv[])
+int main(void)
 {
   int testfds[num_tests][2];
   int resultfds[num_tests][2];
@@ -37,7 +38,7 @@ int main(int argc, char *argv[])
       close(resultfds[i][0]);
       dup2(testfds[i][0], STDIN_FILENO);
       dup2(resultfds[i][1], STDOUT_FILENO);
-      execl("primality", "primality", TESTS[i], (char *)NULL);
+      execl("primality.exe", "primality.exe", TESTS[i], (char *)NULL);
     }
 
     // we are the parent

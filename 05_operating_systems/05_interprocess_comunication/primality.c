@@ -3,12 +3,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include "types.h"
 
-int brute_force(long n);
-int brutish(long n);
-int miller_rabin(long n);
+bool brute_force_impl(long n);
+bool brutish_impl(long n);
+bool miller_rabin_impl(long n);
 
-void exit_with_usage()
+__attribute__((__noreturn__)) void exit_with_usage(void)
 {
   fprintf(stderr, "Usage: ./primality [brute_force|brutish|miller_rabin]\n");
   exit(1);
@@ -17,17 +18,17 @@ void exit_with_usage()
 int main(int argc, char *argv[])
 {
   long num;
-  int (*func)(long), tty;
+  bool (*func)(long), tty;
 
   if (argc != 2)
     exit_with_usage();
 
   if (strcmp(argv[1], "brute_force") == 0)
-    func = &brute_force;
+    func = &brute_force_impl;
   else if (strcmp(argv[1], "brutish") == 0)
-    func = &brutish;
+    func = &brutish_impl;
   else if (strcmp(argv[1], "miller_rabin") == 0)
-    func = &miller_rabin;
+    func = &miller_rabin_impl;
   else
     exit_with_usage();
 
@@ -51,7 +52,7 @@ int main(int argc, char *argv[])
     while ((elements_read = scanf("%ld", &num)) != EOF && elements_read == 1)
     {
       int result = (*func)(num);
-      fprintf(stdout, "%ld\n", result);
+      fprintf(stdout, "%d\n", result);
     }
   }
 }
@@ -61,7 +62,7 @@ int main(int argc, char *argv[])
  */
 
 // Just test every factor
-int brute_force(long n)
+bool brute_force_impl(long n)
 {
   for (long i = 2; i < n; i++)
     if (n % i == 0)
@@ -70,9 +71,9 @@ int brute_force(long n)
 }
 
 // Test factors, up to sqrt(n)
-int brutish(long n)
+bool brutish_impl(long n)
 {
-  long max = floor(sqrt(n));
+  long max = (long)floor(sqrt((double)n));
   for (long i = 2; i <= max; i++)
     if (n % i == 0)
       return 0;
@@ -107,9 +108,9 @@ int witness(int a, int s, int d, int n)
 int MILLER_RABIN_ITERATIONS = 10;
 
 // An implementation of the probabilistic Miller-Rabin test
-int miller_rabin(long n)
+bool miller_rabin_impl(long n)
 {
-  int a, s = 0, d = n - 1;
+  int a, s = 0, d = (int)n - 1;
 
   if (n == 2)
     return 1;
@@ -124,8 +125,8 @@ int miller_rabin(long n)
   }
   for (int i = 0; i < MILLER_RABIN_ITERATIONS; i++)
   {
-    a = randint(2, n - 1);
-    if (!witness(a, s, d, n))
+    a = randint(2, (int)n - 1);
+    if (!witness(a, s, d, (int)n))
       return 0;
   }
   return 1;
