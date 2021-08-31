@@ -3,6 +3,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <mqueue.h>
+#include <time.h>
+#include <errno.h>
 #include "types.h"
 
 bool brute_force_impl(long n);
@@ -20,39 +23,93 @@ int main(int argc, char *argv[])
   long num;
   bool (*func)(long), tty;
 
-  if (argc != 2)
-    exit_with_usage();
-
-  if (strcmp(argv[1], "brute_force") == 0)
-    func = &brute_force_impl;
-  else if (strcmp(argv[1], "brutish") == 0)
-    func = &brutish_impl;
-  else if (strcmp(argv[1], "miller_rabin") == 0)
-    func = &miller_rabin_impl;
-  else
-    exit_with_usage();
-
-  tty = isatty(fileno(stdin));
-
-  if (tty)
+  if (argc == 2) // console mode
   {
-    fprintf(stderr, "Running \"%s\", enter a number:\n> ", argv[1]);
+    if (strcmp(argv[1], ALGORITHMS_STRING[brute_force]) == 0)
+      func = &brute_force_impl;
+    else if (strcmp(argv[1], ALGORITHMS_STRING[brutish]) == 0)
+      func = &brutish_impl;
+    else if (strcmp(argv[1], ALGORITHMS_STRING[miller_rabin]) == 0)
+      func = &miller_rabin_impl;
+    else
+      exit_with_usage();
 
-    while (scanf("%ld", &num) == 1)
+    tty = isatty(fileno(stdin));
+
+    if (tty)
     {
-      printf("%d\n", (*func)(num));
-      fflush(stdout);
-      fprintf(stderr, "> ");
+      fprintf(stderr, "Running \"%s\", enter a number:\n> ", argv[1]);
+
+      while (scanf("%ld", &num) == 1)
+      {
+        printf("%d\n", (*func)(num));
+        fflush(stdout);
+        fprintf(stderr, "> ");
+      }
+    }
+    else
+    {
+      int elements_read;
+
+      while ((elements_read = scanf("%ld", &num)) != EOF && elements_read == 1)
+      {
+        bool result = (*func)(num);
+        fprintf(stdout, "%d\n", result);
+      }
     }
   }
-  else
+  else // IPC worker mode
   {
-    int elements_read;
 
-    while ((elements_read = scanf("%ld", &num)) != EOF && elements_read == 1)
+    mqd_t request_queue = mq_open(request_queue_name, O_RDWR);
+
+    if (request_queue == (mqd_t)-1)
     {
-      int result = (*func)(num);
-      fprintf(stdout, "%d\n", result);
+      printf("%s\n", strerror(errno));
+      exit(EXIT_FAILURE);
+    }
+    mqd_t response_queue = mq_open(response_queue_name, O_RDWR);
+    if (request_queue == (mqd_t)-1)
+    {
+      printf("%s\n", strerror(errno));
+      exit(EXIT_FAILURE);
+    }
+
+    struct request *req = calloc(1, sizeof(struct request));
+    struct response *resp = calloc(1, sizeof(struct response));
+
+    while (true)
+    {
+      mq_receive(request_queue, (char *)req,
+                 sizeof(struct request), (unsigned int)0);
+      printf("received request for %ld with alg %s", req->number,
+             ALGORITHMS_STRING[req->alg]);
+      switch (req->alg)
+      {
+      case brute_force:
+        func = &brute_force_impl;
+        break;
+      case brutish:
+        func = &brutish_impl;
+        break;
+      case miller_rabin:
+        func = &miller_rabin_impl;
+        break;
+      default:
+        fprintf(stderr, "Got request for unexpected algorithm\n");
+        exit(-1);
+      }
+      clock_t begin = clock();
+      bool result = (*func)(num);
+      clock_t end = clock();
+      double time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
+
+      resp->alg = req->alg;
+      resp->number = req->number;
+      resp->result = result;
+      resp->duration = time_spent;
+      mq_send(response_queue, (const char *)resp,
+              sizeof(struct response), (unsigned int)0);
     }
   }
 }

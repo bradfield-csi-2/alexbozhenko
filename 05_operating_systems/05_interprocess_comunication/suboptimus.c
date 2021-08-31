@@ -3,9 +3,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/wait.h>
+#include <sys/prctl.h>
 #include <unistd.h>
 #include <sys/sysinfo.h>
 #include <mqueue.h>
+#include <errno.h>
+#include <string.h>
 #include "types.h"
 
 int START = 2, END = 20;
@@ -28,11 +31,44 @@ int main(void)
 {
   long n;
   pid_t pid;
+  int CPU_CORES = get_nprocs();
+  CPU_CORES = 1;
 
-  mqd_t request_queue = mq_open(request_queue_name, O_RDWR);
-  mqd_t response_queue = mq_open(response_queue_name, O_RDWR);
+  struct mq_attr attr;
 
-  for (int i = 0; i < get_nprocs(); i++)
+  // TODO do we need this?
+  /* initialize the queue attributes */
+
+  // set the value first
+  //sudo sysctl  fs.mqueue.msg_max=10240
+
+  //check it:
+  //sysctl -a 2>/dev/null | grep mqueue
+
+  // and then run with:
+  // prlimit --nofile=20000 ./suboptimus.exe
+  attr.mq_flags = 0;
+  attr.mq_maxmsg = 1000;
+  attr.mq_msgsize = 100;
+  attr.mq_curmsgs = 0;
+
+  mqd_t request_queue = mq_open(request_queue_name, O_RDWR | O_CREAT,
+                                0644, &attr);
+  if (request_queue == (mqd_t)-1)
+  {
+    printf("%s\n", strerror(errno));
+    exit(EXIT_FAILURE);
+  }
+  mqd_t response_queue = mq_open(response_queue_name, O_RDWR | O_CREAT,
+                                 0644, &attr);
+
+  if (request_queue == (mqd_t)-1)
+  {
+    printf("%s\n", strerror(errno));
+    exit(EXIT_FAILURE);
+  }
+
+  for (int i = 0; i < CPU_CORES; i++)
   {
     pid = fork();
 
@@ -44,6 +80,7 @@ int main(void)
 
     if (pid == 0)
     {
+      prctl(PR_SET_PDEATHSIG, SIGKILL);
       // we are the child, run primality.exe
       execl("primality.exe", "primality.exe", (char *)NULL);
     }
@@ -54,20 +91,23 @@ int main(void)
   {
     for (int i = 0; i < NUM_ALGORITHMS; i++)
     {
-      // we are the parent, so send test case to child and read results
       struct request req = {.number = n, .alg = i};
       mq_send(request_queue, (const char *)&req,
               sizeof(req), (unsigned int)0);
+      printf("Enqueued %ld with %15s\n",
+             req.number,
+             ALGORITHMS_STRING[req.alg]);
     }
   }
+  struct response *resp = calloc(1, sizeof(struct response));
   for (int i = 0; i <= NUM_ALGORITHMS * (END - START + 1); i++)
   {
-    struct response *resp = {0};
     mq_receive(response_queue, (char *)resp,
                sizeof(struct response), (unsigned int)0);
-    printf("%15s says %ld %s prime\n",
-           ALGORITHMS_STRING[i],
+    printf("%15s says %ld %s prime. Took %2.2e s.\n",
+           ALGORITHMS_STRING[resp->alg],
            resp->number,
-           resp->result ? "is" : "IS NOT");
+           resp->result ? "is" : "IS NOT",
+           resp->duration);
   }
 }
