@@ -6,7 +6,8 @@
         "stdbool.h": "c",
         "mqueue.h": "c",
         "sysinfo.h": "c",
-        "errno.h": "c"
+        "errno.h": "c",
+        "time.h": "c"
     },
     "cSpell.words": [
         "primality"

@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <mqueue.h>
 #include <time.h>
+#include <bsd/sys/time.h>
 #include <errno.h>
 #include "types.h"
 
@@ -98,15 +99,20 @@ int main(int argc, char *argv[])
         fprintf(stderr, "Got request for unexpected algorithm\n");
         exit(-1);
       }
-      clock_t begin = clock();
+
+      struct timespec begin, end, time_spent;
+      clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &begin);
       result = (*func)(req.number);
-      clock_t end = clock();
-      double time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
+      clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &end);
+      timespecsub(&end, &begin, &time_spent);
+      // printf("time_spent %lld.%.9ld\n", (long long)time_spent.tv_sec, time_spent.tv_nsec);
+      double time_spent_secs = (double)(time_spent.tv_sec) +
+                               (double)(time_spent.tv_nsec) / 1000000000;
 
       resp.alg = req.alg;
       resp.number = req.number;
       resp.result = result;
-      resp.duration = time_spent;
+      resp.duration = time_spent_secs;
       mq_send(response_queue, (const char *)&resp,
               sizeof(struct response), (unsigned int)0);
     }

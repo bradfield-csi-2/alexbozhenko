@@ -113,10 +113,10 @@ int main(void)
   {
     mq_receive(response_queue, (char *)&resp,
                sizeof(struct response), (unsigned int)0);
-    printf("%15s says %ld %6s prime. Took %2.10f s.\n",
+    printf("%15s says %ld %6s prime. Took %2.9f s.\n",
            ALGORITHMS_STRING[resp.alg],
            resp.number,
-           resp.result ? "is" : "IS NOT",
+           resp.result ? "IS" : "IS_NOT",
            resp.duration);
   }
   fflush(stdout);
