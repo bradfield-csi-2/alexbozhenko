@@ -11,9 +11,7 @@
 #include <string.h>
 #include "types.h"
 
-int START = 2300000, END = 24000500;
-char *TESTS[] = {"brute_force", "brutish", "miller_rabin"};
-int num_tests = sizeof(TESTS) / sizeof(char *);
+int START = 98300000, END;
 
 // PLAN:
 //+ 1. create queues in suboptimus
@@ -32,6 +30,7 @@ int main(void)
   long n;
   pid_t pid;
   int CPU_CORES = get_nprocs();
+  END = START + 100500;
 
   struct mq_attr attr;
 
@@ -114,7 +113,7 @@ int main(void)
   {
     mq_receive(response_queue, (char *)&resp,
                sizeof(struct response), (unsigned int)0);
-    printf("%15s says %ld %s prime. Took %2.10f s.\n",
+    printf("%15s says %ld %6s prime. Took %2.10f s.\n",
            ALGORITHMS_STRING[resp.alg],
            resp.number,
            resp.result ? "is" : "IS NOT",
