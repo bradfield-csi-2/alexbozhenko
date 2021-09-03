@@ -169,6 +169,7 @@ static int arrayfs_getattr(const char *path, struct stat *stbuf,
 	memset(stbuf, 0, sizeof(struct stat));
 	int dir = parse_dir(path);
 	int file = parse_file(path);
+	printf("dir=%d files=%d\n", dir, file);
 	if (strcmp(path, "/") == 0)
 	{
 		stbuf->st_mode = S_IFDIR | 0755;
@@ -178,13 +179,15 @@ static int arrayfs_getattr(const char *path, struct stat *stbuf,
 			 dir != -1 && array[dir] != NULL) // no more slashes in the path,
 											  // so it is a directory
 	{
+		printf("entered nested dir path of getattr.");
 		stbuf->st_mode = S_IFDIR | 0755;
 		stbuf->st_nlink = 2;
 	}
-	else if (((int)(strchr(path + 1, '/') - path) == 1) &&
+	else if (((int)(strchr(path + 1, '/') - path) == 2) &&
 			 (file != -1) &&
 			 (array[dir][file] != NULL)) // found second slash, so it is a file
 	{
+		printf("entered file path of getattr.");
 		stbuf->st_mode = S_IFREG | 0444;
 		stbuf->st_nlink = 1;
 		stbuf->st_size = strlen(array[dir][file]);
@@ -195,32 +198,69 @@ static int arrayfs_getattr(const char *path, struct stat *stbuf,
 	return res;
 }
 
-static int hello_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
-						 off_t offset, struct fuse_file_info *fi,
-						 enum fuse_readdir_flags flags)
+static int arrayfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
+						   off_t offset, struct fuse_file_info *fi,
+						   enum fuse_readdir_flags flags)
 {
 	(void)offset;
 	(void)fi;
 	(void)flags;
-
-	if (strcmp(path, "/") != 0)
-		return -ENOENT;
+	int dir = parse_dir(path);
+	int file = parse_file(path);
+	printf("dir=%d files=%d\n", dir, file);
 
 	filler(buf, ".", NULL, 0, 0);
 	filler(buf, "..", NULL, 0, 0);
-	filler(buf, "hello", NULL, 0, 0);
+	if (strcmp(path, "/") == 0)
+	{
+		for (int i = 0; i < ROOTDIR_LENGTH; i++)
+		{
+			for (int j = 0; j < DIR_LENGTH; j++)
+			{
+				if (array[i][j] != NULL)
+				{
+					char s[2];
+					snprintf(s, 2, "%d", i);
 
+					filler(buf, s, NULL, 0, 0);
+					continue;
+				}
+			}
+		}
+	}
+	else if ((dir != -1) && (file == -1)) // nested dir
+	{
+		for (int j = 0; j < DIR_LENGTH; j++)
+		{
+			if (array[dir][j] != NULL)
+			{
+				char s[2];
+				snprintf(s, 2, "%d", j);
+
+				filler(buf, s, NULL, 0, 0);
+				continue;
+			}
+		}
+	}
+	else
+	{
+		return -ENOENT;
+	}
 	return 0;
 }
 
-static int hello_open(const char *path, struct fuse_file_info *fi)
+static int arrayfs_open(const char *path, struct fuse_file_info *fi)
 {
-	if (strcmp(path + 1, "hello") != 0)
+	int dir = parse_dir(path);
+	int file = parse_file(path);
+	if (file == -1)
+		return -ENOENT;
+
+	if (array[dir][file] == NULL)
 		return -ENOENT;
 
 	if ((fi->flags & O_ACCMODE) != O_RDONLY)
 		return -EACCES;
-
 	return 0;
 }
 
@@ -248,8 +288,8 @@ static int hello_read(const char *path, char *buf, size_t size, off_t offset,
 static const struct fuse_operations arrayfs_oper = {
 	.init = arrayfs_init,
 	.getattr = arrayfs_getattr,
-	.readdir = hello_readdir,
-	.open = hello_open,
+	.readdir = arrayfs_readdir,
+	.open = arrayfs_open,
 	.read = hello_read,
 };
 
