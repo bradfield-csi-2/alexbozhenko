@@ -1,0 +1,17 @@
+{
+    "files.associations": {
+        "unistd.h": "c",
+        "types.h": "c",
+        "stdio.h": "c",
+        "stdbool.h": "c",
+        "mqueue.h": "c",
+        "sysinfo.h": "c",
+        "errno.h": "c",
+        "time.h": "c",
+        "assert.h": "c",
+        "fuse.h": "c"
+    },
+    "cSpell.words": [
+        "primality"
+    ]
+}
