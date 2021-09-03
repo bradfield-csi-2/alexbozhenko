@@ -76,10 +76,37 @@
             },
             "args": [
                 "-c",
-                "${fileDirname}/${fileBasenameNoExtension}.exe"
+                "${fileDirname}/${fileBasenameNoExtension}.exe",
             ],
             "options": {
                 "cwd": "/usr/bin"
+            },
+            "problemMatcher": [],
+            "group": {
+                "kind": "test",
+                "isDefault": true
+            }
+        },
+        {
+            "type": "shell",
+            "label": "umount_test",
+            "dependsOn": [],
+            "command": "/usr/bin/bash",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "revealProblems": "onProblem",
+                "focus": true,
+                "panel": "shared",
+                "showReuseMessage": false,
+                "clear": false
+            },
+            "args": [
+                "-c",
+                "umount test",
+            ],
+            "options": {
+                "cwd": "${fileDirname}"
             },
             "problemMatcher": [],
             "group": {

@@ -9,7 +9,10 @@
         "errno.h": "c",
         "time.h": "c",
         "assert.h": "c",
-        "fuse.h": "c"
+        "fuse.h": "c",
+        "array": "c",
+        "string": "c",
+        "string_view": "c"
     },
     "cSpell.words": [
         "primality"
