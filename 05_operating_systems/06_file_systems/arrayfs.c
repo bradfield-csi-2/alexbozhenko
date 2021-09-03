@@ -13,26 +13,35 @@ static void *hello_init(struct fuse_conn_info *conn,
 {
 	(void)conn;
 	cfg->kernel_cache = 1;
+	//TODO allocate array and return it!
 	return NULL;
 }
 
-static int hello_getattr(const char *path, struct stat *stbuf,
-						 struct fuse_file_info *fi)
+static int arrayfs_getattr(const char *path, struct stat *stbuf,
+						   struct fuse_file_info *fi)
 {
 	(void)fi;
 	int res = 0;
+	struct fuse_context fc = *fuse_get_context();
+	fc.private_data;
 
 	memset(stbuf, 0, sizeof(struct stat));
 	if (strcmp(path, "/") == 0)
 	{
 		stbuf->st_mode = S_IFDIR | 0755;
+		stbuf->st_nlink = 2; //TODO + num of elems on first level
+	}
+	else if (strchr(path + 1, "/") == NULL) // no more slashes in the path,
+											// so it is a directory
+	{
+		stbuf->st_mode = S_IFDIR | 0755;
 		stbuf->st_nlink = 2;
 	}
-	else if (strcmp(path + 1, "hello") == 0)
+	else if (strchr(path + 1, "/") == 1) // found second slash, so it is a file
 	{
 		stbuf->st_mode = S_IFREG | 0444;
 		stbuf->st_nlink = 1;
-		stbuf->st_size = strlen("hello");
+		stbuf->st_size = strlen("hello"); //TODO length of the string contents
 	}
 	else
 		res = -ENOENT;
@@ -92,7 +101,7 @@ static int hello_read(const char *path, char *buf, size_t size, off_t offset,
 
 static const struct fuse_operations hello_oper = {
 	.init = hello_init,
-	.getattr = hello_getattr,
+	.getattr = arrayfs_getattr,
 	.readdir = hello_readdir,
 	.open = hello_open,
 	.read = hello_read,
