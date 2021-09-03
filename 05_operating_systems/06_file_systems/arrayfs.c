@@ -13,41 +13,29 @@
 
 char *array[ROOTDIR_LENGTH][DIR_LENGTH];
 
-// directory one = {"a", NULL, "b",
-// 				 NULL, NULL, NULL,
-// 				 NULL, NULL, NULL,
-// 				 "v"};
-// directory two = {"c", NULL, NULL,
-// 				 NULL, NULL, NULL,
-// 				 NULL, "d", NULL,
-// 				 "e"};
-// directory three = {NULL, NULL, NULL,
-// 				   "f", "g", "h",
-// 				   NULL, NULL, NULL,
-// 				   NULL};
-
-// directory array_tmp[ROOTDIR_LENGTH] = {NULL, NULL, NULL,
-// 										  one, two, three,
-// 										  NULL, NULL, NULL,
-// 										  NULL};
-
 static void *arrayfs_init(struct fuse_conn_info *conn,
 						  struct fuse_config *cfg)
 {
 	(void)conn;
 	cfg->kernel_cache = 1;
-	array[0][0] = "a";
+
+	// TODO: I was not able to figure out proper way to initialize
+	// array of arrays of strings. What is the right way?
+	// Also, instead of using global array, we want to return from this
+	// function, so we can access it as private_data field of fuse_context
+
+	array[0][0] = "Hi.";
 	array[0][1] = NULL;
 	array[0][2] = NULL;
 	array[0][3] = NULL;
 	array[0][4] = NULL;
-	array[0][5] = NULL;
+	array[0][5] = "this";
 	array[0][6] = NULL;
 	array[0][7] = NULL;
 	array[0][8] = NULL;
 	array[0][9] = NULL;
 	array[1][0] = NULL;
-	array[1][1] = NULL;
+	array[1][1] = "is";
 	array[1][2] = NULL;
 	array[1][3] = NULL;
 	array[1][4] = NULL;
@@ -57,7 +45,7 @@ static void *arrayfs_init(struct fuse_conn_info *conn,
 	array[1][8] = NULL;
 	array[1][9] = NULL;
 	array[2][0] = NULL;
-	array[2][1] = "b";
+	array[2][1] = "only";
 	array[2][2] = NULL;
 	array[2][3] = NULL;
 	array[2][4] = NULL;
@@ -75,7 +63,7 @@ static void *arrayfs_init(struct fuse_conn_info *conn,
 	array[3][6] = NULL;
 	array[3][7] = NULL;
 	array[3][8] = NULL;
-	array[3][9] = NULL;
+	array[3][9] = "a";
 	array[4][0] = NULL;
 	array[4][1] = NULL;
 	array[4][2] = NULL;
@@ -83,7 +71,7 @@ static void *arrayfs_init(struct fuse_conn_info *conn,
 	array[4][4] = NULL;
 	array[4][5] = NULL;
 	array[4][6] = NULL;
-	array[4][7] = "c";
+	array[4][7] = "test";
 	array[4][8] = NULL;
 	array[4][9] = NULL;
 	array[5][0] = NULL;
@@ -117,7 +105,7 @@ static void *arrayfs_init(struct fuse_conn_info *conn,
 	array[7][8] = NULL;
 	array[7][9] = NULL;
 	array[8][0] = NULL;
-	array[8][1] = "d";
+	array[8][1] = "!";
 	array[8][2] = NULL;
 	array[8][3] = NULL;
 	array[8][4] = NULL;
@@ -223,7 +211,7 @@ static int arrayfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 					snprintf(s, 2, "%d", i);
 
 					filler(buf, s, NULL, 0, 0);
-					continue;
+					break;
 				}
 			}
 		}
@@ -264,20 +252,25 @@ static int arrayfs_open(const char *path, struct fuse_file_info *fi)
 	return 0;
 }
 
-static int hello_read(const char *path, char *buf, size_t size, off_t offset,
-					  struct fuse_file_info *fi)
+static int arrayfs_read(const char *path, char *buf, size_t size, off_t offset,
+						struct fuse_file_info *fi)
 {
 	size_t len;
 	(void)fi;
-	if (strcmp(path + 1, "hello") != 0)
+	int dir = parse_dir(path);
+	int file = parse_file(path);
+	if (dir == -1 || file == -1)
 		return -ENOENT;
 
-	len = strlen("hello");
+	if (array[dir][file] == NULL)
+		return -ENOENT;
+
+	len = strlen(array[dir][file]);
 	if (offset < len)
 	{
 		if (offset + size > len)
 			size = len - offset;
-		memcpy(buf, "hello" + offset, size);
+		memcpy(buf, array[dir][file] + offset, size);
 	}
 	else
 		size = 0;
@@ -290,7 +283,7 @@ static const struct fuse_operations arrayfs_oper = {
 	.getattr = arrayfs_getattr,
 	.readdir = arrayfs_readdir,
 	.open = arrayfs_open,
-	.read = hello_read,
+	.read = arrayfs_read,
 };
 
 int main(int argc, char *argv[])
