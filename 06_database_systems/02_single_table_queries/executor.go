@@ -24,7 +24,8 @@ Selection which yields only records that return true for a
   (column_name string, OP WHAT_TYPE?, value string)
 
 Scan which yields each row for the table as needed. In this
-  initial implementation your Scan operator can return rows from a predefined list in memory.
+  initial implementation your Scan operator can return
+  rows from a predefined list in memory.
   (table_name)
 */
 
@@ -32,10 +33,16 @@ func executor(root RootOperator) []Tuple {
 	return nil
 }
 
+type InMemoryDB map[string][]Tuple
+
+var DB InMemoryDB
+
 func main() {
-	inMemoryDB := readCsvFile("movies.csv")
+	DB["movies"] = readCsvFile("movies.csv")
+	DB["tags"] = readCsvFile("tags.csv")
+
 	root := RootOperator{
-		child: nil,
+		child: NewScanOperator("movies", &DB, nil),
 	}
 	fmt.Println(executor(root))
 }
