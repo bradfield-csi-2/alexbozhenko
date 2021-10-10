@@ -46,7 +46,13 @@ func main() {
 	DB["tags"] = readCsvFile("tags.csv")
 
 	root := RootOperator{
-		child: NewScanOperator("movies", &DB, nil),
+		child: NewSelectionOperator(
+			NewOrExpression(
+				NewEQExpression("title", "LOL (2006)"),
+				NewEQExpression("title", "Casino Royale (2006)"),
+			),
+			NewScanOperator("movies", &DB, nil),
+		),
 	}
 	fmt.Println(executor(root))
 }
