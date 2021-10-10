@@ -7,12 +7,12 @@ type ScanOperator struct {
 	table      []Tuple
 }
 
-func NewScanOperator(tableName string, db *InMemoryDB, child Operator) ScanOperator {
+func NewScanOperator(tableName string, db *InMemoryDB, child Operator) *ScanOperator {
 	table, tableExists := (*db)[tableName]
 	if !tableExists {
 		panic("Table does not exist")
 	}
-	return ScanOperator{
+	return &ScanOperator{
 		tableName:  tableName,
 		child:      child,
 		currentRow: 0,
@@ -21,7 +21,7 @@ func NewScanOperator(tableName string, db *InMemoryDB, child Operator) ScanOpera
 }
 
 func (so *ScanOperator) Next() bool {
-	return so.currentRow <= len(so.table)
+	return so.currentRow < len(so.table)
 
 }
 

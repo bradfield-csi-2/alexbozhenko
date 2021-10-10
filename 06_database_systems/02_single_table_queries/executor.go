@@ -30,12 +30,16 @@ Scan which yields each row for the table as needed. In this
 */
 
 func executor(root RootOperator) []Tuple {
-	return nil
+	var result []Tuple
+	for root.child.Next() {
+		result = append(result, root.child.Execute())
+	}
+	return result
 }
 
 type InMemoryDB map[string][]Tuple
 
-var DB InMemoryDB
+var DB InMemoryDB = make(InMemoryDB)
 
 func main() {
 	DB["movies"] = readCsvFile("movies.csv")
