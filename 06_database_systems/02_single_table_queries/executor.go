@@ -1,6 +1,9 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 /*
 For example query like this:
@@ -29,10 +32,10 @@ Scan which yields each row for the table as needed. In this
   (table_name)
 */
 
-func executor(root RootOperator) []Tuple {
-	var result []Tuple
+func executor(root RootOperator) []string {
+	var result []string
 	for root.child.Next() {
-		result = append(result, root.child.Execute())
+		result = append(result, fmt.Sprintf("%s", root.child.Execute()))
 	}
 	return result
 }
@@ -46,13 +49,28 @@ func main() {
 	DB["tags"] = readCsvFile("tags.csv")
 
 	root := RootOperator{
-		child: NewSelectionOperator(
-			NewOrExpression(
-				NewEQExpression("title", "LOL (2006)"),
-				NewEQExpression("title", "Casino Royale (2006)"),
-			),
-			NewScanOperator("movies", &DB, nil),
-		),
+		child: NewSortOperator(
+			[]OrderBy{
+				{
+					column: "genres",
+					order:  ASC,
+				},
+				{
+					column: "title",
+					order:  DESC,
+				},
+				{
+					column: "movieId",
+					order:  DESC,
+				},
+			},
+			NewSelectionOperator(
+				NewOrExpression(
+					NewEQExpression("genres", "Action|Adventure|Thriller"),
+					NewEQExpression("genres", "Adventure|Animation|Children|Comedy|Fantasy"),
+				),
+				NewScanOperator("movies", &DB, nil),
+			)),
 	}
-	fmt.Println(executor(root))
+	fmt.Println(strings.Join(executor(root), "\n"))
 }
