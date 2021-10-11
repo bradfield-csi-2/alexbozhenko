@@ -108,3 +108,33 @@ func (e *EQExpression) Execute(tuple Tuple) bool {
 
 	panic(fmt.Sprintf("tuple: %v did not contain field: %s", tuple, e.field))
 }
+
+type BinaryJoinExpression interface {
+	Execute(Tuple, Tuple) bool
+}
+
+type EQJoinExpression struct {
+	field1 string
+	field2 string
+}
+
+func NewEQJoinExpression(field1, field2 string) *EQJoinExpression {
+	return &EQJoinExpression{
+		field1: field1,
+		field2: field2,
+	}
+}
+
+func (e *EQJoinExpression) Execute(tuple1, tuple2 Tuple) bool {
+	for _, v1 := range tuple1.Values {
+		if v1.Name == e.field1 {
+			for _, v2 := range tuple2.Values {
+				if v2.Name == e.field2 {
+					return v1.StringValue == v2.StringValue
+				}
+			}
+			panic(fmt.Sprintf("tuple: %v did not contain field: %s", tuple2, e.field2))
+		}
+	}
+	panic(fmt.Sprintf("tuple: %v did not contain field: %s", tuple1, e.field1))
+}

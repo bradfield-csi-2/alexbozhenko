@@ -48,31 +48,40 @@ func main() {
 	DB["movies"] = readCsvFile("movies.csv")
 	DB["tags"] = readCsvFile("tags.csv")
 
+	// root := RootOperator{
+	// 	child: NewLimitOperator(5,
+	// 		NewProjectionOperator([]string{"title", "genres", "movieId"},
+	// 			NewSortOperator(
+	// 				[]OrderBy{
+	// 					{
+	// 						column: "genres",
+	// 						order:  ASC,
+	// 					},
+	// 					{
+	// 						column: "title",
+	// 						order:  DESC,
+	// 					},
+	// 					{
+	// 						column: "movieId",
+	// 						order:  DESC,
+	// 					},
+	// 				},
+	// 				NewSelectionOperator(
+	// 					NewOrExpression(
+	// 						NewEQExpression("genres", "Action|Adventure|Thriller"),
+	// 						NewEQExpression("genres", "Adventure|Animation|Children|Comedy|Fantasy"),
+	// 					),
+	// 					NewScanOperator("movies", &DB, nil),
+	// 				)))),
+	// }
+	//fmt.Println(strings.Join(executor(root), "\n"))
+
 	root := RootOperator{
-		child: NewLimitOperator(5,
-			NewProjectionOperator([]string{"title", "genres", "movieId"},
-				NewSortOperator(
-					[]OrderBy{
-						{
-							column: "genres",
-							order:  ASC,
-						},
-						{
-							column: "title",
-							order:  DESC,
-						},
-						{
-							column: "movieId",
-							order:  DESC,
-						},
-					},
-					NewSelectionOperator(
-						NewOrExpression(
-							NewEQExpression("genres", "Action|Adventure|Thriller"),
-							NewEQExpression("genres", "Adventure|Animation|Children|Comedy|Fantasy"),
-						),
-						NewScanOperator("movies", &DB, nil),
-					)))),
+		child: NewJoinOperator(
+			NewScanOperator("movies", &DB, nil),
+			NewScanOperator("tags", &DB, nil),
+			NewEQJoinExpression("movieId", "movieId"),
+		),
 	}
 	fmt.Println(strings.Join(executor(root), "\n"))
 }

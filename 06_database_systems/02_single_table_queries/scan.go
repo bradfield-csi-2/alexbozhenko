@@ -30,3 +30,7 @@ func (so *ScanOperator) Execute() Tuple {
 	so.currentRow += 1
 	return tuple
 }
+
+func (so *ScanOperator) Reset() {
+	so.currentRow = 0
+}
