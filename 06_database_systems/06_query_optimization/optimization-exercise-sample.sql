@@ -8,8 +8,8 @@ declare
     min_salary int;
     max_salary int;
 begin
-    num_employees := 50000;
-    num_bonuses := 200000;
+    num_employees := 500000;
+    num_bonuses := 2000000;
     min_salary := 70000;
     max_salary := 80000;
 
@@ -41,7 +41,9 @@ begin
 
     /* create an index on employee salary */
     create index employee_manager_salary on employee (manager_id);
-    create index bonus_emp_id_time on bonus (emp_id, time);
+    --create index bonus_emp_id_time on bonus (emp_id, time);
+    create index bonus_emp_id on bonus (emp_id);
+    create index emp_dep_id on employee(dep_id);
 --    create index employee_salary on employee (salary);
 --    create index employee_salary_dep on employee (salary, dep_id);
 --    create index employee_manager_salary on employee (manager_id, salary);
@@ -82,7 +84,7 @@ $$ language plpgsql;
 
 /* rebuild test data: comment this out to use existing data set */
 \t on
-select rebuild();
+--select rebuild();
 \t off
 
 /* average employee salary... note what happens when we have 3-4x the number of employees */
@@ -99,14 +101,25 @@ group by employee.emp_id;
 
 -- 2. Which employees received the highest total compensation last year, and how much was it?
 
-explain analyze select e.emp_id, e.name, e.salary + sum(b.amount) as tc 
+/* explain analyze select e.emp_id, e.name, e.salary + sum(b.amount) as tc 
 from employee e
 join bonus b on e.emp_id = b.emp_id
 where b.time between '01-01-2020'::timestamp and '31-12-2020'::timestamp
 group by e.emp_id -- turns out, starting with pg 9.1, having pkey in "group by" is enough
 order by tc desc
-limit 10;
+limit 10; */
 
+--3. What is the total bonus amount awarded by department?
+
+explain analyze verbose select d.name, sum(amount) as total_bonus 
+from department d
+left join employee e 
+    on e.dep_id = d.dep_id
+left join bonus b 
+    on b.emp_id = e.emp_id
+group by d.dep_id;
+
+--4. Which employees earned more than their managers?
 
 
 /* top salaries in sales... note what indexes would help here? */
