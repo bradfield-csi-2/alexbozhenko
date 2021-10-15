@@ -109,18 +109,25 @@ group by e.emp_id -- turns out, starting with pg 9.1, having pkey in "group by" 
 order by tc desc
 limit 10; */
 
+
 --3. What is the total bonus amount awarded by department?
 
-explain analyze verbose select d.name, sum(amount) as total_bonus 
+/*explain analyze verbose select d.name, sum(amount) as total_bonus 
 from department d
 left join employee e 
     on e.dep_id = d.dep_id
 left join bonus b 
     on b.emp_id = e.emp_id
-group by d.dep_id;
+group by d.dep_id;*/
 
 --4. Which employees earned more than their managers?
 
+explain analyze select e.name, e.salary, m.salary from employee e
+join employee m on e.manager_id = m.emp_id
+where e.salary > m.salary
+
+--5. In which departments did employees earn more
+-- total compensations than their managers last year?
 
 /* top salaries in sales... note what indexes would help here? */
 --explain select * from employee where employee.dep_id = 1 order by employee.salary limit 10;
