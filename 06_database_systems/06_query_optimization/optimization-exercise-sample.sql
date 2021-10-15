@@ -122,12 +122,27 @@ group by d.dep_id;*/
 
 --4. Which employees earned more than their managers?
 
+/*
 explain analyze select e.name, e.salary, m.salary from employee e
 join employee m on e.manager_id = m.emp_id
 where e.salary > m.salary
+*/
 
 --5. In which departments did employees earn more
 -- total compensations than their managers last year?
+
+select e.emp_id, e.name,  e.salary + sum(eb.amount) as e_tc,
+m.emp_id as manager_id, m.m_tc as manager_tc
+from employee e
+join bonus eb on e.emp_id = eb.emp_id
+join (select e.emp_id, salary + sum(mb.amount) as m_tc
+            from employee e
+            join bonus mb on e.emp_id = mb.emp_id
+            group by e.emp_id) as m
+on e.manager_id = m.emp_id
+where e.e_tc > m.m_tc
+group by e.emp_id, m.emp_id, m.m_tc; -- turns out, starting with pg 9.1, having pkey in "group by" is enough
+
 
 /* top salaries in sales... note what indexes would help here? */
 --explain select * from employee where employee.dep_id = 1 order by employee.salary limit 10;
