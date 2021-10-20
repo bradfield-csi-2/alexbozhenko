@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"strings"
 )
 
 /*
@@ -32,12 +31,10 @@ Scan which yields each row for the table as needed. In this
   (table_name)
 */
 
-func executor(root RootOperator) []string {
-	var result []string
+func executor(root RootOperator) {
 	for root.child.Next() {
-		result = append(result, fmt.Sprintf("%s", root.child.Execute()))
+		fmt.Printf("%s\n", root.child.Execute())
 	}
-	return result
 }
 
 type InMemoryDB map[string][]Tuple
@@ -83,5 +80,6 @@ func main() {
 			NewEQJoinExpression("movieId", "movieId"),
 		),
 	}
-	fmt.Println(strings.Join(executor(root), "\n"))
+
+	executor(root)
 }

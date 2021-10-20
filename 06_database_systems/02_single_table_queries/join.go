@@ -1,63 +1,70 @@
 package main
 
 type JoinOperator struct {
-	left       Operator
-	right      Operator
-	expression BinaryJoinExpression
-	current    Tuple
+	left        Operator
+	currentLeft Tuple
+	right       Operator
+	expression  BinaryJoinExpression
+	current     Tuple
 }
 
 func NewJoinOperator(left Operator, right Operator, expression BinaryJoinExpression) *JoinOperator {
-	var current Tuple = Tuple{}
-	var currentLeft, currentRight Tuple
-out:
-	for left.Next() {
-		currentLeft = left.Execute()
-		for right.Next() {
-			currentRight = right.Execute()
-			if expression.Execute(currentLeft, currentRight) {
-				current = Tuple{
-					Values: append(currentLeft.Values, currentRight.Values...),
-				}
-				break out
-			}
-		}
-	}
-	return &JoinOperator{
-		left:       left,
+
+	joinOperator := &JoinOperator{
+		left:        left,
+		currentLeft: Tuple{}, // we have to save the state of current tuple
+		// since Operator only defines execute(), which moves the iterator
 		right:      right,
 		expression: expression,
-		current:    current,
+		current:    Tuple{},
 	}
+	getCurrent(joinOperator)
+	return joinOperator
 }
 
-func (so *JoinOperator) Next() bool {
-	return so.current.Values != nil
+func (jo *JoinOperator) Next() bool {
+	return jo.current.Values != nil
 
 }
 
-func (so *JoinOperator) Execute() Tuple {
-	result := so.current
-
+func getCurrent(jo *JoinOperator) {
 	var current Tuple = Tuple{}
-	var currentLeft, currentRight Tuple
+	var currentRight Tuple
+
+	if jo.currentLeft.Values == nil && jo.left.Next() {
+		// this is the first invocation of the function,
+		// we need to save the tuple on the outer operator
+		// for re-use on next invocations
+		jo.currentLeft = jo.left.Execute()
+	}
 out:
-	for so.left.Next() {
-		currentLeft = so.left.Execute()
-		for so.right.Next() {
-			currentRight = so.right.Execute()
-			if so.expression.Execute(currentLeft, currentRight) {
+	for jo.currentLeft.Values != nil {
+		for jo.right.Next() {
+			currentRight = jo.right.Execute()
+			if jo.expression.Execute(jo.currentLeft, currentRight) {
 				current = Tuple{
-					Values: append(currentLeft.Values, currentRight.Values...),
+					Values: append(jo.currentLeft.Values, currentRight.Values...),
 				}
 				break out
 			}
 		}
-		// need to do reset here?
-		// how, if not all operators implement it?
-		// type coercion ?
-		//so.right.Reset()
+		scanOperator, ok := jo.right.(*ScanOperator)
+		if ok {
+			scanOperator.Reset()
+		}
+		if jo.left.Next() {
+			jo.currentLeft = jo.left.Execute()
+		} else {
+			jo.currentLeft = Tuple{}
+		}
 	}
-	so.current = current
+	//	fmt.Println(jo.currentLeft)
+	jo.current = current
+}
+
+func (jo *JoinOperator) Execute() Tuple {
+	result := jo.current
+	getCurrent(jo)
+	//	fmt.Println(current)
 	return result
 }
