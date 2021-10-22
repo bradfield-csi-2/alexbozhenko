@@ -42,8 +42,28 @@ type InMemoryDB map[string][]Tuple
 var DB InMemoryDB = make(InMemoryDB)
 
 func main() {
+
 	DB["movies"] = readCsvFile("movies.csv")
 	DB["tags"] = readCsvFile("tags.csv")
+
+	/*
+		moviesFileWriter := NewFileWriter(
+			"./movies",
+			[]string{"movieId", "title", "genres"},
+		)
+		for _, tuple := range DB["movies"] {
+			moviesFileWriter.Append(tuple)
+		}
+
+		tagsFileWriter := NewFileWriter(
+			"./tags",
+			[]string{"userId", "movieId", "tag", "timestamp"},
+		)
+		for _, tuple := range DB["tags"] {
+			fmt.Println(tuple)
+			tagsFileWriter.Append(tuple)
+		}
+	*/
 
 	// root := RootOperator{
 	// 	child: NewLimitOperator(5,

@@ -39,3 +39,7 @@ func (so *SelectionOperator) Execute() Tuple {
 	so.current = record
 	return result
 }
+
+func (so *SelectionOperator) Reset() {
+	// Not implemented
+}

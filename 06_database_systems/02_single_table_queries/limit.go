@@ -23,3 +23,7 @@ func (so *LimitOperator) Execute() Tuple {
 	so.returnedSoFar++
 	return so.child.Execute()
 }
+
+func (so *LimitOperator) Reset() {
+	// Not implemented
+}

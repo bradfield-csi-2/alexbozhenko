@@ -7,6 +7,7 @@ type Operator interface {
 	// Execute executes the operation and returns the resulting tuple. Should only
 	// be called if Next() returns true.
 	Execute() Tuple
+	Reset() //Reset the state for the iterator, if it makes sense for particular Operator
 }
 
 // Tuple represents a tuple (row) of values.

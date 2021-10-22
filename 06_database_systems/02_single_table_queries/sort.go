@@ -77,3 +77,7 @@ func (so *SortOperator) Execute() Tuple {
 	so.currentRow++
 	return result
 }
+
+func (so *SortOperator) Reset() {
+	// not implemented
+}

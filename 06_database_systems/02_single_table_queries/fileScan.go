@@ -50,7 +50,9 @@ func NewFileScanOperator(tableName string, dbPath string, child Operator) *FileS
 
 func (so *FileScanOperator) Next() bool {
 	_, err := so.r.Peek(1)
-	if err == io.EOF {
+	// TODO fixme!
+	//	if err == io.EOF {
+	if err != nil {
 		return false
 	} else {
 		return true
@@ -79,5 +81,5 @@ func (so *FileScanOperator) Execute() Tuple {
 
 func (so *FileScanOperator) Reset() {
 	so.f.Seek(0, io.SeekStart)
-	//	so.r = bufio.NewReader(so.f)
+	//so.r = bufio.NewReader(so.f)
 }

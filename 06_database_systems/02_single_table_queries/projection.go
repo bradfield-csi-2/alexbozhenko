@@ -30,3 +30,7 @@ func (so *ProjectionOperator) Execute() Tuple {
 	}
 	return projected
 }
+
+func (so *ProjectionOperator) Reset() {
+	// Not implemented
+}

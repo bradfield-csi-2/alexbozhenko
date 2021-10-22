@@ -48,10 +48,7 @@ out:
 				break out
 			}
 		}
-		scanOperator, ok := jo.right.(*ScanOperator)
-		if ok {
-			scanOperator.Reset()
-		}
+		jo.right.Reset()
 		if jo.left.Next() {
 			jo.currentLeft = jo.left.Execute()
 		} else {
@@ -67,4 +64,8 @@ func (jo *JoinOperator) Execute() Tuple {
 	getCurrent(jo)
 	//	fmt.Println(current)
 	return result
+}
+
+func (jo *JoinOperator) Reset() {
+	// not implemented
 }
