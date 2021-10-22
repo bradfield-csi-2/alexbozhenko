@@ -75,8 +75,8 @@ func main() {
 
 	root := RootOperator{
 		child: NewJoinOperator(
-			NewScanOperator("movies", &DB, nil),
-			NewScanOperator("tags", &DB, nil),
+			NewFileScanOperator("movies", ".", nil),
+			NewFileScanOperator("tags", ".", nil),
 			NewEQJoinExpression("movieId", "movieId"),
 		),
 	}
