@@ -31,11 +31,12 @@ func NewFileScanOperator(tableName string, dbPath string, child Operator) *FileS
 	if err != nil {
 		log.Fatal("Unable to read input file ", err)
 	}
-	defer dataF.Close()
 
 	csvReader := csv.NewReader(metaF)
-	csvReader.Read()
 	columnNames, err := csvReader.ReadAll()
+	if err != nil {
+		panic(err)
+	}
 	columns := columnNames[0]
 
 	return &FileScanOperator{
