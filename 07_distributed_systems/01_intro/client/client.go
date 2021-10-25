@@ -42,6 +42,7 @@ func set(key, value string) (response string, err error) {
 		value: value})
 
 	// TODO: bytes.NewReader copies the []byte, right?
+	// TODO: should we use protobuf or something else, instead?
 	req, err := http.NewRequest(http.MethodPut, URL, bytes.NewReader(jsonData))
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
 	resp, err := http.DefaultClient.Do(req)

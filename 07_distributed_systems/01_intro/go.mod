@@ -1,3 +1,3 @@
-module kv_store_ser
+module kv_store
 
 go 1.17
