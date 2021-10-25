@@ -24,9 +24,14 @@ func must(err error) {
 }
 
 func get(key string) (response string, err error) {
-	return "result of get " + key, nil
 	//TODO: re-use tcp connection for entire repl session?
-	resp, err := http.Get(URL)
+	req, err := http.NewRequest(http.MethodGet, URL+"/get", nil)
+	must(err)
+	q := req.URL.Query()
+	q.Add("key", key)
+	req.URL.RawQuery = q.Encode()
+
+	resp, err := http.DefaultClient.Do(req)
 	must(err)
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
@@ -34,16 +39,15 @@ func get(key string) (response string, err error) {
 }
 
 func set(key, value string) (response string, err error) {
-	return "result of set " + key + ":" + value, nil
 	jsonData, err := json.Marshal(struct {
-		key   string
-		value string
-	}{key: key,
-		value: value})
+		Key   string
+		Value string
+	}{Key: key,
+		Value: value})
 
 	// TODO: bytes.NewReader copies the []byte, right?
 	// TODO: should we use protobuf or something else, instead?
-	req, err := http.NewRequest(http.MethodPut, URL, bytes.NewReader(jsonData))
+	req, err := http.NewRequest(http.MethodPut, URL+"/put", bytes.NewReader(jsonData))
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
 	resp, err := http.DefaultClient.Do(req)
 	must(err)
@@ -70,7 +74,7 @@ func main() {
 	getRE := regexp.MustCompile(`(get) ([^=]+)$`)
 	putRE := regexp.MustCompile(`(set) ([^=]+)=(.*)`)
 
-	fmt.Println("Welcome to distributed K-V store")
+	fmt.Println("Welcome to the distributed K-V store client")
 	fmt.Println(`We support the following syntax:
 get foo
 set foo=bar`)
