@@ -1,10 +1,12 @@
 package main
 
 import (
+	"encoding/gob"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"os"
 )
 
 const (
@@ -14,7 +16,9 @@ const (
 	STORAGE_FILEPATH = "storage"
 )
 
-var keyValueMap = make(map[string]string)
+type inMemoryStorage map[string]string
+
+var keyValueMap = make(inMemoryStorage)
 
 func getHandler(w http.ResponseWriter, r *http.Request) {
 	keys, ok := r.URL.Query()["key"]
@@ -36,6 +40,19 @@ func errorResponse(w *http.ResponseWriter, message string, code int) {
 	(*w).Write([]byte(message))
 }
 
+func persistUpdate(m *inMemoryStorage) error {
+
+	f, err := os.OpenFile(STORAGE_FILEPATH, os.O_WRONLY|os.O_SYNC, 0644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	//	b := new(bytes.Buffer)
+	encoder := gob.NewEncoder(f)
+	err = encoder.Encode(*m)
+	return err
+}
+
 func putHandler(w http.ResponseWriter, r *http.Request) {
 	reqData := struct {
 		Key   string
@@ -53,6 +70,11 @@ func putHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	_, keyExists := keyValueMap[reqData.Key]
 	keyValueMap[reqData.Key] = reqData.Value
+	err = persistUpdate(&keyValueMap)
+	if err != nil {
+		errorResponse(&w, "Server error", http.StatusInternalServerError)
+		return
+	}
 	if keyExists {
 		w.Write([]byte("UPDATED"))
 	} else {
@@ -60,18 +82,19 @@ func putHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// func init() {
-// 	b := new(bytes.Buffer)
-// 	decoder = gob.NewDecoder(b)
-// 	err := decoder.Decode(keyValueMap)
-// 	f, err := ioutil.ReadFile(STORAGE_FILEPATH)
-// 	if err != nil {
-// 		panic()
-// 	}
-// 	b.Write(f)
-// 	defer close(f)
-
-// }
+func init() {
+	// data, err 	:= os.ReadFile(STORAGE_FILEPATH)
+	f, err := os.OpenFile(STORAGE_FILEPATH, os.O_RDONLY|os.O_CREATE, 0644)
+	if err != nil {
+		panic("Error reading storage")
+	}
+	defer f.Close()
+	decoder := gob.NewDecoder(f)
+	err = decoder.Decode(&keyValueMap)
+	if err != nil {
+		panic("Error decoding storage")
+	}
+}
 
 func main() {
 	fmt.Println("Welcome to the distributed K-V store server")
