@@ -18,6 +18,13 @@ const (
 
 type inMemoryStorage map[string]string
 
+// TODO: Add a mutex
+
+// to avoid
+// fatal error: concurrent map writes
+// that can be triggered by running expect script in parallel:
+// clush -B -R exec -w [1-10] expect expect_script.exp
+
 var keyValueMap = make(inMemoryStorage)
 
 func getHandler(w http.ResponseWriter, r *http.Request) {
