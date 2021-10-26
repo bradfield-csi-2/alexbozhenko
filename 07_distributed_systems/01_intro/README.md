@@ -25,3 +25,7 @@ You can also run expect script:
 ```
 client$ go build; expect expect_script.exp
 ```
+Or do it in parallel with `clush`:
+```
+client$ go build; clush -f 100  -R exec -w [1-100] expect expect_script.exp
+```
