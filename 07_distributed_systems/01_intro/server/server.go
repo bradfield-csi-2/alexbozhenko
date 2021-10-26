@@ -4,6 +4,7 @@ import (
 	"encoding/gob"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -19,15 +20,9 @@ const (
 
 type inMemoryStorage map[string]string
 
-// TODO: Add a mutex
-
-// to avoid
-// fatal error: concurrent map writes
-// that can be triggered by running expect script in parallel:
-// clush -B -R exec -w [1-10] expect expect_script.exp
-
 var keyValueMap = make(inMemoryStorage)
 
+var storageFD *os.File
 var mutex sync.RWMutex
 
 func getHandler(w http.ResponseWriter, r *http.Request) {
@@ -53,14 +48,10 @@ func errorResponse(w *http.ResponseWriter, message string, code int) {
 }
 
 func persistUpdate(m *inMemoryStorage) error {
-
-	f, err := os.OpenFile(STORAGE_FILEPATH, os.O_WRONLY|os.O_SYNC, 0644)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	encoder := gob.NewEncoder(f)
-	err = encoder.Encode(*m)
+	storageFD.Truncate(0)
+	storageFD.Seek(0, io.SeekStart)
+	encoder := gob.NewEncoder(storageFD)
+	err := encoder.Encode(*m)
 	return err
 }
 
@@ -85,7 +76,8 @@ func putHandler(w http.ResponseWriter, r *http.Request) {
 	err = persistUpdate(&keyValueMap)
 	mutex.Unlock()
 	if err != nil {
-		errorResponse(&w, "Server error", http.StatusInternalServerError)
+		message := fmt.Sprintf("Server error: %s", err)
+		errorResponse(&w, message, http.StatusInternalServerError)
 		return
 	}
 	if keyExists {
@@ -103,14 +95,19 @@ func init() {
 	defer f.Close()
 	decoder := gob.NewDecoder(f)
 	err = decoder.Decode(&keyValueMap)
-	if err != nil {
-		panic("Error decoding storage")
+	if err != io.EOF && err != nil {
+		panic(fmt.Sprintf("Error decoding storage: %s", err))
 	}
 }
 
 func main() {
 	fmt.Println("Welcome to the distributed K-V store server")
-
+	var err error
+	storageFD, err = os.OpenFile(STORAGE_FILEPATH, os.O_WRONLY|os.O_SYNC, 0644)
+	if err != nil {
+		panic(err)
+	}
+	defer storageFD.Close()
 	http.HandleFunc("/get", getHandler)
 	http.HandleFunc("/put", putHandler)
 
