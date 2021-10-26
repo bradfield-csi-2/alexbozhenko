@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"time"
 )
 
 const (
@@ -31,11 +32,13 @@ func get(key string) (response string, err error) {
 	q.Add("key", key)
 	req.URL.RawQuery = q.Encode()
 
+	start := time.Now()
 	resp, err := http.DefaultClient.Do(req)
+	elapsed := time.Since(start)
 	must(err)
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
-	return string(body), err
+	return string(body) + " <" + fmt.Sprintf("%4.2f", float64(elapsed)/1_000_000.0) + "ms>", err
 }
 
 func set(key, value string) (response string, err error) {
@@ -49,11 +52,13 @@ func set(key, value string) (response string, err error) {
 	// TODO: should we use gob or even https://pkg.go.dev/net/rpc ?
 	req, err := http.NewRequest(http.MethodPut, URL+"/put", bytes.NewReader(jsonData))
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
+	start := time.Now()
 	resp, err := http.DefaultClient.Do(req)
+	elapsed := time.Since(start)
 	must(err)
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
-	return string(body), err
+	return string(body) + " <" + fmt.Sprintf("%4.2f", float64(elapsed)/1_000_000.0) + "ms>", err
 }
 
 func parseCommand(getRE, putRE *regexp.Regexp, userInput []byte) (verb, key, value string) {
