@@ -55,14 +55,12 @@ out:
 			jo.currentLeft = Tuple{}
 		}
 	}
-	//	fmt.Println(jo.currentLeft)
 	jo.current = current
 }
 
 func (jo *JoinOperator) Execute() Tuple {
 	result := jo.current
 	getCurrent(jo)
-	//	fmt.Println(current)
 	return result
 }
 

@@ -1,7 +1,11 @@
 package main
 
 import (
+	"flag"
 	"fmt"
+	"log"
+	"os"
+	"runtime/pprof"
 )
 
 /*
@@ -41,10 +45,23 @@ type InMemoryDB map[string][]Tuple
 
 var DB InMemoryDB = make(InMemoryDB)
 
+var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to file")
+var memprofile = flag.String("memprofile", "", "write memory profile to file")
+
 func main() {
 
-	DB["movies"] = readCsvFile("movies.csv")
-	DB["tags"] = readCsvFile("tags.csv")
+	//DB["movies"] = readCsvFile("movies.csv")
+	//DB["tags"] = readCsvFile("tags.csv")
+
+	flag.Parse()
+	if *cpuprofile != "" {
+		f, err := os.Create(*cpuprofile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		pprof.StartCPUProfile(f)
+		defer pprof.StopCPUProfile()
+	}
 
 	/*
 		moviesFileWriter := NewFileWriter(
@@ -93,13 +110,28 @@ func main() {
 	// }
 	//fmt.Println(strings.Join(executor(root), "\n"))
 
+	/*
+		root := RootOperator{
+			child: NewJoinOperator(
+				NewFileScanOperator("movies", ".", nil),
+				NewFileScanOperator("tags", ".", nil),
+				NewEQJoinExpression("movieId", "movieId"),
+			),
+		}
+	*/
+
 	root := RootOperator{
-		child: NewJoinOperator(
-			NewFileScanOperator("movies", ".", nil),
-			NewFileScanOperator("tags", ".", nil),
-			NewEQJoinExpression("movieId", "movieId"),
-		),
+		child: NewFileScanOperator("tags", ".", nil),
 	}
 
 	executor(root)
+
+	if *memprofile != "" {
+		f, err := os.Create(*memprofile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		pprof.WriteHeapProfile(f)
+		defer f.Close()
+	}
 }
