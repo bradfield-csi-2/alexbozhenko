@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"os"
+	"runtime"
 	"sync"
 )
 
@@ -26,6 +28,7 @@ var storageFD *os.File
 var mutex sync.RWMutex
 
 func getHandler(w http.ResponseWriter, r *http.Request) {
+	log.Printf("getHander. Goroutines:%v", runtime.NumGoroutine())
 	keys, ok := r.URL.Query()["key"]
 	if !ok {
 		fmt.Fprintf(w, "Key parameter is not found in the request")
@@ -56,6 +59,7 @@ func persistUpdate(m *inMemoryStorage) error {
 }
 
 func putHandler(w http.ResponseWriter, r *http.Request) {
+	log.Printf("putHander. Goroutines:%v", runtime.NumGoroutine())
 	reqData := struct {
 		Key   string
 		Value string
