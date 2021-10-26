@@ -11,7 +11,7 @@ set foo=bar\r
 In \[1\]: "
 set NUM 1
 
-while { $NUM <= 10 } {
+while { $NUM <= 100 } {
 	send -- "get bar\r"
 	expect "Out*"
 	sleep 0.1

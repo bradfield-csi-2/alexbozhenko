@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"sync"
 )
 
 const (
@@ -27,6 +28,8 @@ type inMemoryStorage map[string]string
 
 var keyValueMap = make(inMemoryStorage)
 
+var mutex sync.RWMutex
+
 func getHandler(w http.ResponseWriter, r *http.Request) {
 	keys, ok := r.URL.Query()["key"]
 	if !ok {
@@ -34,7 +37,9 @@ func getHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	key := keys[0]
+	mutex.RLock()
 	value, ok := keyValueMap[key]
+	mutex.RUnlock()
 	if ok {
 		fmt.Fprintf(w, "%s", value)
 	} else {
@@ -54,7 +59,6 @@ func persistUpdate(m *inMemoryStorage) error {
 		return err
 	}
 	defer f.Close()
-	//	b := new(bytes.Buffer)
 	encoder := gob.NewEncoder(f)
 	err = encoder.Encode(*m)
 	return err
@@ -75,9 +79,11 @@ func putHandler(w http.ResponseWriter, r *http.Request) {
 		errorResponse(&w, "Bad request", http.StatusBadRequest)
 		return
 	}
+	mutex.Lock()
 	_, keyExists := keyValueMap[reqData.Key]
 	keyValueMap[reqData.Key] = reqData.Value
 	err = persistUpdate(&keyValueMap)
+	mutex.Unlock()
 	if err != nil {
 		errorResponse(&w, "Server error", http.StatusInternalServerError)
 		return
@@ -90,7 +96,6 @@ func putHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func init() {
-	// data, err 	:= os.ReadFile(STORAGE_FILEPATH)
 	f, err := os.OpenFile(STORAGE_FILEPATH, os.O_RDONLY|os.O_CREATE, 0644)
 	if err != nil {
 		panic("Error reading storage")
@@ -105,7 +110,6 @@ func init() {
 
 func main() {
 	fmt.Println("Welcome to the distributed K-V store server")
-	//TODO init
 
 	http.HandleFunc("/get", getHandler)
 	http.HandleFunc("/put", putHandler)
