@@ -48,7 +48,10 @@ func set(key, value string) (response string, err error) {
 	}{Key: key,
 		Value: value})
 
-	// TODO: bytes.NewReader copies the []byte, right?
+	// bytes.NewReader copies the []byte, right?
+	// No, it does not! https://stackoverflow.com/a/39993797/1572363
+	// You should've known.
+
 	// TODO: should we use gob or even https://pkg.go.dev/net/rpc ?
 	req, err := http.NewRequest(http.MethodPut, URL+"/put", bytes.NewReader(jsonData))
 	// application/octet-stream ?

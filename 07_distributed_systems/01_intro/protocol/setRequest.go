@@ -1,6 +1,6 @@
 package protocol
 
-const setVersion = 1
+const SET_PROTOCOL = 1
 
 type setRequest struct {
 	key []byte
