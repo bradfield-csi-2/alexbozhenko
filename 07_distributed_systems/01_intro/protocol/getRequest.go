@@ -3,6 +3,7 @@ package protocol
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"io"
 )
 
@@ -52,6 +53,10 @@ func (req *getRequest) Decode(reqBytes []byte) error {
 		return err
 	}
 
+	if len(reqBytes)-int(keyStartOffset) < int(keyLength) {
+		return fmt.Errorf("expected message of len %v, but got only %v bytes",
+			keyLength, reader.Size()-keyStartOffset)
+	}
 	//not using reader io.ReadFull() to avoid copying
 	req.key = reqBytes[keyStartOffset : keyStartOffset+int64(keyLength)]
 
