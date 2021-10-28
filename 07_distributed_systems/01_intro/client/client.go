@@ -51,6 +51,7 @@ func set(key, value string) (response string, err error) {
 	// TODO: bytes.NewReader copies the []byte, right?
 	// TODO: should we use gob or even https://pkg.go.dev/net/rpc ?
 	req, err := http.NewRequest(http.MethodPut, URL+"/put", bytes.NewReader(jsonData))
+	// application/octet-stream ?
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
 	start := time.Now()
 	resp, err := http.DefaultClient.Do(req)
