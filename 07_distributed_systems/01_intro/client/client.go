@@ -24,6 +24,8 @@ func panicOnError(err error) {
 	}
 }
 
+// abozhenko for oz: Is it ok to use http at all?
+
 func get(key string) (response string, err error) {
 	//TODO: re-use tcp connection for entire repl session?
 	getRequest := protocol.GetRequest{
@@ -31,7 +33,12 @@ func get(key string) (response string, err error) {
 	}
 	reqBytes := getRequest.Encode()
 
-	req, err := http.NewRequest(http.MethodGet, URL+"/get", bytes.NewReader(reqBytes))
+	//abozhenko for oz: Do you think it is ok to use get request body?
+	// I saw some discussion here
+	// https://stackoverflow.com/questions/978061/http-get-with-request-body
+	// but I haven't form my own opinion
+	req, err := http.NewRequest(http.MethodGet, URL+"/get",
+		bytes.NewReader(reqBytes))
 	panicOnError(err)
 	req.Header.Set("Content-Type", "application/octet-stream")
 
@@ -54,6 +61,8 @@ func set(key, value string) (response string, err error) {
 	// No, it does not! https://stackoverflow.com/a/39993797/1572363
 	// You should've known.
 
+	// abozhenko for oz: Is it ok to simply use different endpoints for
+	// gets and puts ?
 	req, err := http.NewRequest(http.MethodPut, URL+"/put",
 		bytes.NewReader(reqBytes))
 	req.Header.Set("Content-Type", "application/octet-stream")

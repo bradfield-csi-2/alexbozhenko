@@ -17,10 +17,19 @@ func appendEncodedItemWithLength(b *[]byte, buf, item []byte) {
 
 // function decodes uvarint-encoded length from current position of r
 // and returns next itemLength bytes of b
-// (r should be the reader of b[[]])
+// (r should be the reader of b[])
 // passing both b and r to function is rather dirty,
 // but it saves allocations.
 func decodeItem(b []byte, r *bytes.Reader) ([]byte, error) {
+	// abozhenko for oz:
+	// I did not want to use io.ReadFull(), since it will allocate and copy
+	// the value from original byte slice. Imagine the value is something
+	// like 512MB. It would be bad, right, so we should avoid such unnecessary
+	// copying?
+	// Is there a better way to structure this function, to not pass
+	// both byte slice and reader from it?
+	// In other words, I wish `s` field of bytes.Reader would be exported,
+	// so I can just reference sub-slice of it directly.
 	itemLength, err := binary.ReadUvarint(r)
 	if err != nil {
 		return nil, err

@@ -20,6 +20,9 @@ const (
 	STORAGE_FILEPATH = "storage"
 )
 
+// abozhenko for oz: Ok, now we have this map that fits into memory
+// Should we assume that whole dataset does not fit in memory, and
+// even on disk on a single server?
 type inMemoryStorage map[string]string
 
 var keyValueMap = make(inMemoryStorage)
@@ -28,9 +31,11 @@ var storageFD *os.File
 var mutex sync.RWMutex
 
 func getHandler(w http.ResponseWriter, r *http.Request) {
-	log.Printf("getHander. Goroutines:%v", runtime.NumGoroutine())
+	log.Printf("getHandler. Goroutines:%v", runtime.NumGoroutine())
 	reqData := protocol.GetRequest{}
 	body, err := ioutil.ReadAll(r.Body)
+	// abozhenko for oz: Is there a best practice to handle errors
+	// and avoid duplication in golang?
 	if err != nil {
 		errorResponse(&w, "Bad request", http.StatusBadRequest)
 		return
@@ -98,13 +103,13 @@ func putHandler(w http.ResponseWriter, r *http.Request) {
 func init() {
 	f, err := os.OpenFile(STORAGE_FILEPATH, os.O_RDONLY|os.O_CREATE, 0644)
 	if err != nil {
-		panic("Error reading storage")
+		panic(fmt.Sprintf("Error reading storage %s", STORAGE_FILEPATH))
 	}
 	defer f.Close()
 	decoder := gob.NewDecoder(f)
 	err = decoder.Decode(&keyValueMap)
 	if err != io.EOF && err != nil {
-		panic(fmt.Sprintf("Error decoding storage: %s", err))
+		panic(fmt.Sprintf("Error decoding storage %s: %s", STORAGE_FILEPATH, err))
 	}
 }
 
