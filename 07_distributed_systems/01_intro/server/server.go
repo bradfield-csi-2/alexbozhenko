@@ -2,10 +2,10 @@ package main
 
 import (
 	"encoding/gob"
-	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
+	"kv_store/protocol"
 	"log"
 	"net/http"
 	"os"
@@ -29,14 +29,21 @@ var mutex sync.RWMutex
 
 func getHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("getHander. Goroutines:%v", runtime.NumGoroutine())
-	keys, ok := r.URL.Query()["key"]
-	if !ok {
-		fmt.Fprintf(w, "Key parameter is not found in the request")
+	reqData := protocol.GetRequest{}
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		errorResponse(&w, "Bad request", http.StatusBadRequest)
 		return
 	}
-	key := keys[0]
+	err = reqData.Decode(body)
+	if err != nil {
+		errorResponse(&w, "Bad request", http.StatusBadRequest)
+		return
+	}
+
+	key := reqData.Key
 	mutex.RLock()
-	value, ok := keyValueMap[key]
+	value, ok := keyValueMap[string(key)]
 	mutex.RUnlock()
 	if ok {
 		fmt.Fprintf(w, "%s", value)
@@ -60,23 +67,20 @@ func persistUpdate(m *inMemoryStorage) error {
 
 func putHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("putHander. Goroutines:%v", runtime.NumGoroutine())
-	reqData := struct {
-		Key   string
-		Value string
-	}{}
+	reqData := protocol.SetRequest{}
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		errorResponse(&w, "Bad request", http.StatusBadRequest)
 		return
 	}
-	err = json.Unmarshal(body, &reqData)
+	err = reqData.Decode(body)
 	if err != nil {
 		errorResponse(&w, "Bad request", http.StatusBadRequest)
 		return
 	}
 	mutex.Lock()
-	_, keyExists := keyValueMap[reqData.Key]
-	keyValueMap[reqData.Key] = reqData.Value
+	_, keyExists := keyValueMap[string(reqData.Key)]
+	keyValueMap[string(reqData.Key)] = string(reqData.Value)
 	err = persistUpdate(&keyValueMap)
 	mutex.Unlock()
 	if err != nil {

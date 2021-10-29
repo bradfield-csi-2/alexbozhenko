@@ -27,21 +27,21 @@ func Test_setRequest_Encode_and_Decode(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := &setRequest{
-				key:   tt.key,
-				value: tt.value,
+			req := &SetRequest{
+				Key:   tt.key,
+				Value: tt.value,
 			}
 			var got []byte
 			if got = req.Encode(); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("getRequest.Encode() = %x, want %x", got, tt.want)
 			}
-			var roundTripResult setRequest
+			var roundTripResult SetRequest
 			roundTripResult.Decode(got)
-			if !reflect.DeepEqual(roundTripResult.key, tt.key) {
-				t.Errorf("setRequest.Decode().key = %x, want %x", roundTripResult.key, tt.key)
+			if !reflect.DeepEqual(roundTripResult.Key, tt.key) {
+				t.Errorf("setRequest.Decode().key = %x, want %x", roundTripResult.Key, tt.key)
 			}
-			if !reflect.DeepEqual(roundTripResult.value, tt.value) {
-				t.Errorf("setRequest.Decode().value = %x, want %x", roundTripResult.value, tt.value)
+			if !reflect.DeepEqual(roundTripResult.Value, tt.value) {
+				t.Errorf("setRequest.Decode().value = %x, want %x", roundTripResult.Value, tt.value)
 			}
 		})
 	}
@@ -72,9 +72,9 @@ func Test_setRequest_Decode(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := &setRequest{
-				key:   tt.wantKey,
-				value: tt.wantValue,
+			req := &SetRequest{
+				Key:   tt.wantKey,
+				Value: tt.wantValue,
 			}
 			if err := req.Decode(tt.reqBytes); (err != nil) != tt.wantErr {
 				t.Errorf("setRequest.Decode() error = %v, wantErr %v", err, tt.wantErr)

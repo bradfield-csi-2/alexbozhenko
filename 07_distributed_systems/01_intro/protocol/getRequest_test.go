@@ -24,17 +24,17 @@ func Test_getRequest_Encode_and_Decode(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := &getRequest{
-				key: tt.key,
+			req := &GetRequest{
+				Key: tt.key,
 			}
 			var got []byte
 			if got = req.Encode(); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("getRequest.Encode() = %x, want %x", got, tt.want)
 			}
-			var roundTripResult getRequest
+			var roundTripResult GetRequest
 			roundTripResult.Decode(got)
-			if !reflect.DeepEqual(roundTripResult.key, tt.key) {
-				t.Errorf("getRequest.Decode() = %x, want %x", roundTripResult.key, tt.key)
+			if !reflect.DeepEqual(roundTripResult.Key, tt.key) {
+				t.Errorf("getRequest.Decode() = %x, want %x", roundTripResult.Key, tt.key)
 			}
 		})
 	}
@@ -62,8 +62,8 @@ func Test_getRequest_Decode(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := &getRequest{
-				key: tt.wantKey,
+			req := &GetRequest{
+				Key: tt.wantKey,
 			}
 			if err := req.Decode(tt.reqBytes); (err != nil) != tt.wantErr {
 				t.Errorf("getRequest.Decode() error = %v, wantErr %v", err, tt.wantErr)

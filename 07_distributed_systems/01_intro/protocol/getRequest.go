@@ -7,8 +7,8 @@ import (
 
 const GET_PROTOCOL = 1
 
-type getRequest struct {
-	key []byte
+type GetRequest struct {
+	Key []byte
 }
 
 // +------------+------------+------------+----------+
@@ -18,7 +18,7 @@ type getRequest struct {
 // |            |  (1 byte)  |            |          |
 // |            |            |            |          |
 // +------------+------------+------------+----------+
-func (req *getRequest) Encode() []byte {
+func (req *GetRequest) Encode() []byte {
 	// allocating maximum possible size according to the
 	// structure above
 	//result := make([]byte, 1+1+binary.MaxVarintLen64+len(req.key))
@@ -26,11 +26,11 @@ func (req *getRequest) Encode() []byte {
 	buf := make([]byte, binary.MaxVarintLen64)
 	result = append(result, 0x00) //reserved
 	result = append(result, GET_PROTOCOL)
-	appendEncodedItemWithLength(&result, buf, req.key)
+	appendEncodedItemWithLength(&result, buf, req.Key)
 	return result
 }
 
-func (req *getRequest) Decode(reqBytes []byte) error {
+func (req *GetRequest) Decode(reqBytes []byte) error {
 	reader := bytes.NewReader(reqBytes)
 	_, err := reader.ReadByte() // ignoring the reserved byte
 	if err != nil {
@@ -44,7 +44,7 @@ func (req *getRequest) Decode(reqBytes []byte) error {
 	if err != nil {
 		return err
 	}
-	req.key = key
+	req.Key = key
 
 	return nil
 }

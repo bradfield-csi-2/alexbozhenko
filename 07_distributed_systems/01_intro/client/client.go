@@ -3,9 +3,9 @@ package main
 import (
 	"bufio"
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"io"
+	"kv_store/protocol"
 	"net/http"
 	"os"
 	"regexp"
@@ -18,7 +18,7 @@ const (
 	URL    = "http://" + SERVER + ":" + PORT
 )
 
-func must(err error) {
+func panicOnError(err error) {
 	if err != nil {
 		panic(err)
 	}
@@ -26,40 +26,41 @@ func must(err error) {
 
 func get(key string) (response string, err error) {
 	//TODO: re-use tcp connection for entire repl session?
-	req, err := http.NewRequest(http.MethodGet, URL+"/get", nil)
-	must(err)
-	q := req.URL.Query()
-	q.Add("key", key)
-	req.URL.RawQuery = q.Encode()
+	getRequest := protocol.GetRequest{
+		Key: []byte(key),
+	}
+	reqBytes := getRequest.Encode()
+
+	req, err := http.NewRequest(http.MethodGet, URL+"/get", bytes.NewReader(reqBytes))
+	panicOnError(err)
+	req.Header.Set("Content-Type", "application/octet-stream")
 
 	start := time.Now()
 	resp, err := http.DefaultClient.Do(req)
 	elapsed := time.Since(start)
-	must(err)
+	panicOnError(err)
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
 	return string(body) + " <" + fmt.Sprintf("%4.2f", float64(elapsed)/1_000_000.0) + "ms>", err
 }
 
 func set(key, value string) (response string, err error) {
-	jsonData, err := json.Marshal(struct {
-		Key   string
-		Value string
-	}{Key: key,
-		Value: value})
-
+	setRequest := protocol.SetRequest{
+		Key:   []byte(key),
+		Value: []byte(value),
+	}
+	reqBytes := setRequest.Encode()
 	// bytes.NewReader copies the []byte, right?
 	// No, it does not! https://stackoverflow.com/a/39993797/1572363
 	// You should've known.
 
-	// TODO: should we use gob or even https://pkg.go.dev/net/rpc ?
-	req, err := http.NewRequest(http.MethodPut, URL+"/put", bytes.NewReader(jsonData))
-	// application/octet-stream ?
-	req.Header.Set("Content-Type", "application/json; charset=utf-8")
+	req, err := http.NewRequest(http.MethodPut, URL+"/put",
+		bytes.NewReader(reqBytes))
+	req.Header.Set("Content-Type", "application/octet-stream")
 	start := time.Now()
 	resp, err := http.DefaultClient.Do(req)
 	elapsed := time.Since(start)
-	must(err)
+	panicOnError(err)
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
 	return string(body) + " <" + fmt.Sprintf("%4.2f", float64(elapsed)/1_000_000.0) + "ms>", err

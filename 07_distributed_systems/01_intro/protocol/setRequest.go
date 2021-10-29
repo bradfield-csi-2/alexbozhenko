@@ -7,9 +7,9 @@ import (
 
 const SET_PROTOCOL = 1
 
-type setRequest struct {
-	key   []byte
-	value []byte
+type SetRequest struct {
+	Key   []byte
+	Value []byte
 }
 
 // +------------+------------+------------+----------+------------+----------+
@@ -19,17 +19,17 @@ type setRequest struct {
 // |            |  (1 byte)  |            |          |            |          |
 // |            |            |            |          |            |          |
 // +------------+------------+------------+----------+------------+----------+
-func (req *setRequest) Encode() []byte {
+func (req *SetRequest) Encode() []byte {
 	result := make([]byte, 0)
 	buf := make([]byte, binary.MaxVarintLen64)
 	result = append(result, 0x00) //reserved
 	result = append(result, SET_PROTOCOL)
-	appendEncodedItemWithLength(&result, buf, req.key)
-	appendEncodedItemWithLength(&result, buf, req.value)
+	appendEncodedItemWithLength(&result, buf, req.Key)
+	appendEncodedItemWithLength(&result, buf, req.Value)
 	return result
 }
 
-func (req *setRequest) Decode(reqBytes []byte) error {
+func (req *SetRequest) Decode(reqBytes []byte) error {
 	reader := bytes.NewReader(reqBytes)
 	_, err := reader.ReadByte() // ignoring the reserved byte
 	if err != nil {
@@ -43,12 +43,12 @@ func (req *setRequest) Decode(reqBytes []byte) error {
 	if err != nil {
 		return err
 	}
-	req.key = key
+	req.Key = key
 	value, err := decodeItem(reqBytes, reader)
 	if err != nil {
 		return err
 	}
-	req.value = value
+	req.Value = value
 
 	return nil
 }
