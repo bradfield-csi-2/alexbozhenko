@@ -3,8 +3,6 @@ package protocol
 import (
 	"bytes"
 	"encoding/binary"
-	"fmt"
-	"io"
 )
 
 const GET_PROTOCOL = 1
@@ -28,9 +26,7 @@ func (req *getRequest) Encode() []byte {
 	buf := make([]byte, binary.MaxVarintLen64)
 	result = append(result, 0x00) //reserved
 	result = append(result, GET_PROTOCOL)
-	nBytes := binary.PutUvarint(buf, uint64(len(req.key)))
-	result = append(result, buf[:nBytes]...)
-	result = append(result, req.key...)
+	appendEncodedItemWithLength(&result, buf, req.key)
 	return result
 }
 
@@ -44,21 +40,11 @@ func (req *getRequest) Decode(reqBytes []byte) error {
 	if err != nil {
 		return err
 	}
-	keyLength, err := binary.ReadUvarint(reader)
+	key, err := decodeItem(reqBytes, reader)
 	if err != nil {
 		return err
 	}
-	keyStartOffset, err := reader.Seek(0, io.SeekCurrent)
-	if err != nil {
-		return err
-	}
-
-	if len(reqBytes)-int(keyStartOffset) < int(keyLength) {
-		return fmt.Errorf("expected message of len %v, but got only %v bytes",
-			keyLength, reader.Size()-keyStartOffset)
-	}
-	//not using reader io.ReadFull() to avoid copying
-	req.key = reqBytes[keyStartOffset : keyStartOffset+int64(keyLength)]
+	req.key = key
 
 	return nil
 }
