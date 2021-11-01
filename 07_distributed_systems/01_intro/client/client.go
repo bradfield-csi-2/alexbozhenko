@@ -16,8 +16,9 @@ import (
 const (
 	SERVER = "127.0.0.1"
 	PORT   = "8000"
-	URL    = "http://" + SERVER + ":" + PORT
 )
+
+var url string
 
 // abozhenko for oz: Is it ok to use http at all?
 
@@ -32,7 +33,7 @@ func get(key string) (response string, err error) {
 	// I saw some discussion here
 	// https://stackoverflow.com/questions/978061/http-get-with-request-body
 	// but I haven't form my own opinion
-	req, err := http.NewRequest(http.MethodGet, URL+"/get",
+	req, err := http.NewRequest(http.MethodGet, url+"/get",
 		bytes.NewReader(reqBytes))
 	helpers.PanicOnError(err)
 	req.Header.Set("Content-Type", "application/octet-stream")
@@ -59,7 +60,7 @@ func set(key, value string) (response string, err error) {
 
 	// abozhenko for oz: Is it ok to simply use different endpoints for
 	// gets and puts ?
-	req, err := http.NewRequest(http.MethodPut, URL+"/put",
+	req, err := http.NewRequest(http.MethodPut, url+"/put",
 		bytes.NewReader(reqBytes))
 	req.Header.Set("Content-Type", "application/octet-stream")
 	start := time.Now()
@@ -85,7 +86,18 @@ func parseCommand(getRE, putRE *regexp.Regexp, userInput []byte) (verb, key, val
 	return
 }
 
+func usage() {
+	fmt.Fprintf(os.Stderr, "usage: client HOST PORT\n")
+	os.Exit(1)
+}
+
 func main() {
+	if len(os.Args) != 3 {
+		usage()
+	}
+	host := os.Args[1]
+	port := os.Args[2]
+	url = "http://" + host + ":" + port
 	getRE := regexp.MustCompile(`(get) ([^=]+)$`)
 	putRE := regexp.MustCompile(`(set) ([^=]+)=(.*)`)
 

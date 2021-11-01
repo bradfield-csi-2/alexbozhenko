@@ -94,10 +94,9 @@ func putHandler(w http.ResponseWriter, r *http.Request) {
 	mutex.Lock()
 	_, keyExists := keyValueMap[string(reqData.Key)]
 	if mode == PRIMARY {
-
 		//send updates to the synchronous follower
 		reqBytes := reqData.Encode()
-		req, err := http.NewRequest(http.MethodPut, SYNC_FOLLOWER_URL+"/put",
+		req, err := http.NewRequest(http.MethodPut, "http://"+SYNC_FOLLOWER_URL+"/put",
 			bytes.NewReader(reqBytes))
 		if errorResponse(&w, err, http.StatusInternalServerError) != nil {
 			return
@@ -107,6 +106,7 @@ func putHandler(w http.ResponseWriter, r *http.Request) {
 		if errorResponse(&w, err, http.StatusInternalServerError) != nil {
 			return
 		}
+		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
 			err = fmt.Errorf("got %d(%s) from synchornous replica. Not proceeding with the write",
 				resp.StatusCode,
@@ -168,6 +168,9 @@ func main() {
 	filename := STORAGE_FILE_PREFIX + fmt.Sprint(mode)
 	readStorage(filename)
 	fmt.Printf("Welcome to the distributed K-V store server in %s mode\n", mode)
+	fmt.Printf("Listening on: %s\n", url)
+	fmt.Printf("Using storage file: %s\n", filename)
+
 	var err error
 	storageFD, err = os.OpenFile(filename, os.O_WRONLY|os.O_SYNC, 0644)
 	if err != nil {
