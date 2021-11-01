@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/gob"
 	"fmt"
 	"io"
@@ -13,11 +14,17 @@ import (
 	"sync"
 )
 
+var mode serverMode
+
 const (
-	SERVER           = "127.0.0.1"
-	PORT             = "8000"
-	URL              = SERVER + ":" + PORT
-	STORAGE_FILEPATH = "storage"
+	SERVER                     = "127.0.0.1"
+	PRIMARY_PORT               = "8000"
+	SYNCHRONOUS_FOLLOWER_PORT  = "8001"
+	ASYNCHRONOUS_FOLLOWER_PORT = "8002"
+	PRIMARY_URL                = SERVER + ":" + PRIMARY_PORT
+	SYNC_FOLLOWER_URL          = SERVER + ":" + SYNCHRONOUS_FOLLOWER_PORT
+	ASYNC_FOLLOWER_URL         = SERVER + ":" + ASYNCHRONOUS_FOLLOWER_PORT
+	STORAGE_FILE_PREFIX        = "storage_"
 )
 
 // abozhenko for oz: Ok, now we have this map that fits into memory
@@ -36,13 +43,11 @@ func getHandler(w http.ResponseWriter, r *http.Request) {
 	body, err := ioutil.ReadAll(r.Body)
 	// abozhenko for oz: Is there a best practice to handle errors
 	// and avoid duplication in golang?
-	if err != nil {
-		errorResponse(&w, "Bad request", http.StatusBadRequest)
+	if errorResponse(&w, err, http.StatusBadRequest) != nil {
 		return
 	}
 	err = reqData.Decode(body)
-	if err != nil {
-		errorResponse(&w, "Bad request", http.StatusBadRequest)
+	if errorResponse(&w, err, http.StatusBadRequest) != nil {
 		return
 	}
 
@@ -57,9 +62,14 @@ func getHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func errorResponse(w *http.ResponseWriter, message string, code int) {
-	(*w).WriteHeader(http.StatusBadRequest)
-	(*w).Write([]byte(message))
+func errorResponse(w *http.ResponseWriter, err error, code int) error {
+	if err != nil {
+		message := fmt.Sprintf("%s: %s", http.StatusText(code), err)
+		(*w).WriteHeader(code)
+		(*w).Write([]byte(message))
+		return err
+	}
+	return nil
 }
 
 func persistUpdate(m *inMemoryStorage) error {
@@ -74,23 +84,41 @@ func putHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("putHander. Goroutines:%v", runtime.NumGoroutine())
 	reqData := protocol.SetRequest{}
 	body, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		errorResponse(&w, "Bad request", http.StatusBadRequest)
+	if errorResponse(&w, err, http.StatusBadRequest) != nil {
 		return
 	}
 	err = reqData.Decode(body)
-	if err != nil {
-		errorResponse(&w, "Bad request", http.StatusBadRequest)
+	if errorResponse(&w, err, http.StatusBadRequest) != nil {
 		return
 	}
 	mutex.Lock()
 	_, keyExists := keyValueMap[string(reqData.Key)]
+	if mode == PRIMARY {
+
+		//send updates to the synchronous follower
+		reqBytes := reqData.Encode()
+		req, err := http.NewRequest(http.MethodPut, SYNC_FOLLOWER_URL+"/put",
+			bytes.NewReader(reqBytes))
+		if errorResponse(&w, err, http.StatusInternalServerError) != nil {
+			return
+		}
+		req.Header.Set("Content-Type", "application/octet-stream")
+		resp, err := http.DefaultClient.Do(req)
+		if errorResponse(&w, err, http.StatusInternalServerError) != nil {
+			return
+		}
+		if resp.StatusCode != http.StatusOK {
+			err = fmt.Errorf("got %d(%s) from synchornous replica. Not proceeding with the write",
+				resp.StatusCode,
+				http.StatusText(resp.StatusCode))
+			errorResponse(&w, err, http.StatusInternalServerError)
+			return
+		}
+	}
 	keyValueMap[string(reqData.Key)] = string(reqData.Value)
 	err = persistUpdate(&keyValueMap)
 	mutex.Unlock()
-	if err != nil {
-		message := fmt.Sprintf("Server error: %s", err)
-		errorResponse(&w, message, http.StatusInternalServerError)
+	if errorResponse(&w, err, http.StatusInternalServerError) != nil {
 		return
 	}
 	if keyExists {
@@ -100,29 +128,57 @@ func putHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func init() {
-	f, err := os.OpenFile(STORAGE_FILEPATH, os.O_RDONLY|os.O_CREATE, 0644)
+func readStorage(filename string) {
+	f, err := os.OpenFile(filename, os.O_RDONLY|os.O_CREATE, 0644)
 	if err != nil {
-		panic(fmt.Sprintf("Error reading storage %s", STORAGE_FILEPATH))
+		panic(fmt.Sprintf("Error reading storage %s", filename))
 	}
 	defer f.Close()
 	decoder := gob.NewDecoder(f)
 	err = decoder.Decode(&keyValueMap)
 	if err != io.EOF && err != nil {
-		panic(fmt.Sprintf("Error decoding storage %s: %s", STORAGE_FILEPATH, err))
+		panic(fmt.Sprintf("Error decoding storage %s: %s", filename, err))
 	}
+}
+func usage() {
+	fmt.Fprintf(os.Stderr, "usage: server <primary|sync_follower|async_follower>\n")
+	os.Exit(1)
 }
 
 func main() {
-	fmt.Println("Welcome to the distributed K-V store server")
+	nArgs := len(os.Args)
+	if nArgs != 2 {
+		usage()
+	}
+	var url string
+	switch os.Args[1] {
+	case "primary":
+		mode = PRIMARY
+		url = PRIMARY_URL
+	case "sync_follower":
+		mode = SYNCHRONOUS_FOLLOWER
+		url = SYNC_FOLLOWER_URL
+	case "async_follower":
+		mode = ASYNCHRONOUS_FOLLOWER
+		url = ASYNC_FOLLOWER_URL
+	default:
+		usage()
+	}
+
+	filename := STORAGE_FILE_PREFIX + fmt.Sprint(mode)
+	readStorage(filename)
+	fmt.Printf("Welcome to the distributed K-V store server in %s mode\n", mode)
 	var err error
-	storageFD, err = os.OpenFile(STORAGE_FILEPATH, os.O_WRONLY|os.O_SYNC, 0644)
+	storageFD, err = os.OpenFile(filename, os.O_WRONLY|os.O_SYNC, 0644)
 	if err != nil {
 		panic(err)
 	}
 	defer storageFD.Close()
 	http.HandleFunc("/get", getHandler)
+
+	// Idea is that writes should be accepted only by the primary node,
+	// but it is not enforced, since we do not have any auth anyway
 	http.HandleFunc("/put", putHandler)
 
-	http.ListenAndServe(URL, nil)
+	http.ListenAndServe(url, nil)
 }

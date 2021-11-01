@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"kv_store/helpers"
 	"kv_store/protocol"
 	"net/http"
 	"os"
@@ -17,12 +18,6 @@ const (
 	PORT   = "8000"
 	URL    = "http://" + SERVER + ":" + PORT
 )
-
-func panicOnError(err error) {
-	if err != nil {
-		panic(err)
-	}
-}
 
 // abozhenko for oz: Is it ok to use http at all?
 
@@ -39,13 +34,14 @@ func get(key string) (response string, err error) {
 	// but I haven't form my own opinion
 	req, err := http.NewRequest(http.MethodGet, URL+"/get",
 		bytes.NewReader(reqBytes))
-	panicOnError(err)
+	helpers.PanicOnError(err)
 	req.Header.Set("Content-Type", "application/octet-stream")
 
 	start := time.Now()
 	resp, err := http.DefaultClient.Do(req)
 	elapsed := time.Since(start)
-	panicOnError(err)
+	helpers.PanicOnError(err)
+
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
 	return string(body) + " <" + fmt.Sprintf("%4.2f", float64(elapsed)/1_000_000.0) + "ms>", err
@@ -69,7 +65,7 @@ func set(key, value string) (response string, err error) {
 	start := time.Now()
 	resp, err := http.DefaultClient.Do(req)
 	elapsed := time.Since(start)
-	panicOnError(err)
+	helpers.PanicOnError(err)
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
 	return string(body) + " <" + fmt.Sprintf("%4.2f", float64(elapsed)/1_000_000.0) + "ms>", err
