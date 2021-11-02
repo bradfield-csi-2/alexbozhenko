@@ -26,9 +26,6 @@ const (
 	WAL_FILEPATH               = "wal"
 )
 
-// abozhenko for oz: Ok, now we have this map that fits into memory
-// Should we assume that whole dataset does not fit in memory, and
-// even on disk on a single server?
 type inMemoryStorage struct {
 	TransactionID uint64
 	Kv            map[string]string
@@ -47,8 +44,6 @@ func (server *serverState) getHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("getHandler. Goroutines:%v", runtime.NumGoroutine())
 	reqData := protocol.GetRequest{}
 	body, err := ioutil.ReadAll(r.Body)
-	// abozhenko for oz: Is there a best practice to handle errors
-	// and avoid duplication in golang?
 	if errorResponse(&w, err, http.StatusBadRequest) != nil {
 		return
 	}
