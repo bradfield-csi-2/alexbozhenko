@@ -1,0 +1,30 @@
+#!/usr/bin/expect -f
+
+set timeout -1
+spawn ./client
+match_max 100000
+expect -exact "Welcome to the distributed K-V store client\r
+We support the following syntax:\r
+get foo\r
+set foo=bar\r
+\r
+In \[1\]: "
+set NUM 1
+
+while { $NUM <= 100 } {
+	send -- "get bar\r"
+	expect "Out*"
+	sleep 0.1
+	send -- "set bar=barbar\r"
+	expect "Out*"
+	sleep 0.1
+	send -- "get foo\r"
+	expect "Out*"
+	sleep 0.1
+	send -- "set foo=foofoo\r"
+	expect "Out*"
+	sleep 0.1
+	set NUM [ expr $NUM + 1 ]
+}
+sleep 0.3	
+send "\x04"
