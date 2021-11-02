@@ -79,7 +79,9 @@ func errorResponse(w *http.ResponseWriter, err error, code int) error {
 	return nil
 }
 
-func persistUpdate(srv *serverState) error {
+// This function must be called only when
+// srv.mutex is locked
+func persistUpdateWithLockedMutex(srv *serverState) error {
 	srv.storageFD.Truncate(0)
 	srv.storageFD.Seek(0, io.SeekStart)
 	encoder := gob.NewEncoder(srv.storageFD)
@@ -134,7 +136,7 @@ func (server *serverState) putHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	server.inMemoryStorage.Kv[string(reqData.Key)] = string(reqData.Value)
-	err = persistUpdate(server)
+	err = persistUpdateWithLockedMutex(server)
 	server.mutex.Unlock()
 	if errorResponse(&w, err, http.StatusInternalServerError) != nil {
 		return
@@ -236,7 +238,13 @@ func main() {
 	http.HandleFunc("/get", server.getHandler)
 	// Idea is that writes should be accepted only by the primary node,
 	// but it is not enforced, since we do not have any auth anyway
-	http.HandleFunc("/put", server.putHandler)
+	if mode != ASYNCHRONOUS_FOLLOWER {
+		http.HandleFunc("/put", server.putHandler)
+	}
+
+	if mode == ASYNCHRONOUS_FOLLOWER {
+		go server.pullPrimaryForUpdatesForever()
+	}
 
 	http.HandleFunc("/async-catchup", server.walGetHandler)
 
@@ -250,13 +258,6 @@ func main() {
 	//TODO: master replays WAL, and responds with k,v list
 	//      of resulting change + id of the latest transaction+
 	//TODO: async follower pulls in a loop, waiting between pulls
-
-	/*	req, err := http.NewRequest(http.MethodGet, URL+"/get", nil)
-		must(err)
-		q := req.URL.Query()
-		q.Add("key", key)
-		req.URL.RawQuery = q.Encode()
-	*/
 
 	//TODO: async follower should store latest applied transaction
 	//      id in a file
