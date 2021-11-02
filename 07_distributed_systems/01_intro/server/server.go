@@ -37,7 +37,6 @@ type inMemoryStorage struct {
 type serverState struct {
 	walFD           *os.File
 	walGobEncoder   *gob.Encoder
-	currentWALId    uint64
 	mode            serverMode
 	inMemoryStorage inMemoryStorage
 	mutex           sync.RWMutex

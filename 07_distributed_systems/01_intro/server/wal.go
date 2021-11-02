@@ -18,7 +18,7 @@ type walRecord struct {
 
 func addToWAL(server *serverState, key, value string, w http.ResponseWriter) error {
 	wr := walRecord{
-		Id:    server.currentWALId + 1,
+		Id:    server.inMemoryStorage.TransactionID + 1,
 		Key:   key,
 		Value: value,
 	}
@@ -27,8 +27,8 @@ func addToWAL(server *serverState, key, value string, w http.ResponseWriter) err
 		server.mutex.Unlock()
 		return err
 	}
-	// incrementing here to avoid inconsistency
-	server.currentWALId++
+	// incrementing after successful append to wal to avoid inconsistency
+	server.inMemoryStorage.TransactionID++
 	return nil
 }
 
@@ -43,7 +43,7 @@ func readWAL(server *serverState, minId uint64) (inMemoryStorage, error) {
 		return inMemoryStorage{}, err
 	}
 	diffStorage := inMemoryStorage{
-		TransactionID: server.currentWALId,
+		TransactionID: server.inMemoryStorage.TransactionID,
 		Kv:            make(map[string]string),
 	}
 
@@ -97,7 +97,8 @@ func (server *serverState) pullPrimaryForUpdates() {
 		return
 	}
 	q := req.URL.Query()
-	q.Add("since", fmt.Sprint((server.inMemoryStorage.TransactionID + 1)))
+	updatesRequiredSinceId := server.inMemoryStorage.TransactionID + 1
+	q.Add("since", fmt.Sprint((updatesRequiredSinceId)))
 	req.URL.RawQuery = q.Encode()
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -128,12 +129,11 @@ func (server *serverState) pullPrimaryForUpdates() {
 		return
 
 	}
-	oldRecordId := server.inMemoryStorage.TransactionID
 	server.inMemoryStorage.TransactionID = catchUpRecords.TransactionID
 	server.mutex.Unlock()
-	log.Printf("Processed %d updates: %d to %d\n",
+	log.Printf("Processed %d unique keys within range of transaction IDs: [%d; %d]\n",
 		len(catchUpRecords.Kv),
-		oldRecordId,
+		updatesRequiredSinceId,
 		catchUpRecords.TransactionID)
 
 }
