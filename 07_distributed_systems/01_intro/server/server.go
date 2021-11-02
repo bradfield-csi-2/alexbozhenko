@@ -29,12 +29,15 @@ const (
 // abozhenko for oz: Ok, now we have this map that fits into memory
 // Should we assume that whole dataset does not fit in memory, and
 // even on disk on a single server?
-type inMemoryStorage map[string]string
-type walRecord [2]string
+type inMemoryStorage struct {
+	transactionID uint64
+	kv            map[string]string
+}
 
 type serverState struct {
 	walFD         *os.File
 	walGobEncoder *gob.Encoder
+	currentWALId  uint64
 	mode          serverMode
 	keyValueMap   inMemoryStorage
 	mutex         sync.RWMutex
@@ -59,7 +62,7 @@ func getHandler(w http.ResponseWriter, r *http.Request) {
 
 	key := reqData.Key
 	server.mutex.RLock()
-	value, ok := server.keyValueMap[string(key)]
+	value, ok := server.keyValueMap.kv[string(key)]
 	server.mutex.RUnlock()
 	if ok {
 		fmt.Fprintf(w, "%s", value)
@@ -78,23 +81,36 @@ func errorResponse(w *http.ResponseWriter, err error, code int) error {
 	return nil
 }
 
-func addToWAL(key, value string, w http.ResponseWriter) error {
-	wr := walRecord{key, value}
-	err := server.walGobEncoder.Encode(&wr)
-	if errorResponse(&w, err, http.StatusInternalServerError) != nil {
-		server.mutex.Unlock()
-		return err
-	}
-	return nil
-	return nil
-}
-
 func persistUpdate(srv *serverState) error {
 	server.storageFD.Truncate(0)
 	server.storageFD.Seek(0, io.SeekStart)
 	encoder := gob.NewEncoder(server.storageFD)
 	err := encoder.Encode(&srv.keyValueMap)
 	return err
+}
+
+func sendUpdateToSynchronousFollower(w http.ResponseWriter, reqData protocol.SetRequest) error {
+	//send updates to the synchronous follower
+	reqBytes := reqData.Encode()
+	req, err := http.NewRequest(http.MethodPut, "http://"+SYNC_FOLLOWER_URL+"/put",
+		bytes.NewReader(reqBytes))
+	if errorResponse(&w, err, http.StatusInternalServerError) != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/octet-stream")
+	resp, err := http.DefaultClient.Do(req)
+	if errorResponse(&w, err, http.StatusInternalServerError) != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		err = fmt.Errorf("got %d(%s) from synchornous replica. Not proceeding with the write",
+			resp.StatusCode,
+			http.StatusText(resp.StatusCode))
+		errorResponse(&w, err, http.StatusInternalServerError)
+		return err
+	}
+	return nil
 }
 
 func putHandler(w http.ResponseWriter, r *http.Request) {
@@ -109,35 +125,18 @@ func putHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	server.mutex.Lock()
-	_, keyExists := server.keyValueMap[string(reqData.Key)]
+	_, keyExists := server.keyValueMap.kv[string(reqData.Key)]
 	if server.mode == PRIMARY {
-		if addToWAL(string(reqData.Key), string(reqData.Value), w) != nil {
+		if addToWAL(server, string(reqData.Key), string(reqData.Value), w) != nil {
 			return
 		}
 	}
 	if server.mode == PRIMARY {
-		//send updates to the synchronous follower
-		reqBytes := reqData.Encode()
-		req, err := http.NewRequest(http.MethodPut, "http://"+SYNC_FOLLOWER_URL+"/put",
-			bytes.NewReader(reqBytes))
-		if errorResponse(&w, err, http.StatusInternalServerError) != nil {
-			return
-		}
-		req.Header.Set("Content-Type", "application/octet-stream")
-		resp, err := http.DefaultClient.Do(req)
-		if errorResponse(&w, err, http.StatusInternalServerError) != nil {
-			return
-		}
-		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			err = fmt.Errorf("got %d(%s) from synchornous replica. Not proceeding with the write",
-				resp.StatusCode,
-				http.StatusText(resp.StatusCode))
-			errorResponse(&w, err, http.StatusInternalServerError)
+		if sendUpdateToSynchronousFollower(w, reqData) != nil {
 			return
 		}
 	}
-	server.keyValueMap[string(reqData.Key)] = string(reqData.Value)
+	server.keyValueMap.kv[string(reqData.Key)] = string(reqData.Value)
 	err = persistUpdate(server)
 	server.mutex.Unlock()
 	if errorResponse(&w, err, http.StatusInternalServerError) != nil {
@@ -187,7 +186,7 @@ func newServer(mode serverMode, url string) *serverState {
 		walFD:         walFD,
 		walGobEncoder: gob.NewEncoder(walFD),
 		mode:          mode,
-		keyValueMap:   map[string]string{},
+		keyValueMap:   inMemoryStorage{},
 		storageFD:     storageFD,
 	}
 	server.readStorage(storageFilename)
@@ -238,6 +237,8 @@ func main() {
 	// Idea is that writes should be accepted only by the primary node,
 	// but it is not enforced, since we do not have any auth anyway
 	http.HandleFunc("/put", putHandler)
+
+	http.HandleFunc("/async-catchup", server.walGetHandler)
 
 	http.ListenAndServe(url, nil)
 	//TODO: primary should write WAL
