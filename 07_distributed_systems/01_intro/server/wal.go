@@ -10,15 +10,15 @@ import (
 )
 
 type walRecord struct {
-	id         uint64
-	key, value string
+	Id         uint64
+	Key, Value string
 }
 
 func addToWAL(server *serverState, key, value string, w http.ResponseWriter) error {
 	wr := walRecord{
-		id:    server.currentWALId + 1,
-		key:   key,
-		value: value,
+		Id:    server.currentWALId + 1,
+		Key:   key,
+		Value: value,
 	}
 	err := server.walGobEncoder.Encode(&wr)
 	if errorResponse(&w, err, http.StatusInternalServerError) != nil {
@@ -42,28 +42,21 @@ func readWAL(server *serverState, minId uint64) (inMemoryStorage, error) {
 		return inMemoryStorage{}, err
 	}
 	diffStorage := inMemoryStorage{
-		transactionID: 0,
-		kv:            make(map[string]string),
+		TransactionID: 0,
+		Kv:            make(map[string]string),
 	}
 	var record walRecord
 	for _, record = range wal {
-		if record.id < minId {
+		if record.Id < minId {
 			continue
 		}
-		diffStorage.kv[record.key] = record.value
-		diffStorage.transactionID = record.id
+		diffStorage.Kv[record.Key] = record.Value
+		diffStorage.TransactionID = record.Id
 	}
 	return diffStorage, nil
 }
 
 func (server *serverState) walGetHandler(w http.ResponseWriter, r *http.Request) {
-	/*	req, err := http.NewRequest(http.MethodGet, URL+"/get", nil)
-		must(err)
-		q := req.URL.Query()
-		q.Add("key", key)
-		req.URL.RawQuery = q.Encode()
-	*/
-
 	walNumbers, ok := r.URL.Query()["since"]
 	if !ok {
 		errorResponse(&w,

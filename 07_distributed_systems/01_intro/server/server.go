@@ -30,23 +30,21 @@ const (
 // Should we assume that whole dataset does not fit in memory, and
 // even on disk on a single server?
 type inMemoryStorage struct {
-	transactionID uint64
-	kv            map[string]string
+	TransactionID uint64
+	Kv            map[string]string
 }
 
 type serverState struct {
-	walFD         *os.File
-	walGobEncoder *gob.Encoder
-	currentWALId  uint64
-	mode          serverMode
-	keyValueMap   inMemoryStorage
-	mutex         sync.RWMutex
-	storageFD     *os.File
+	walFD           *os.File
+	walGobEncoder   *gob.Encoder
+	currentWALId    uint64
+	mode            serverMode
+	inMemoryStorage inMemoryStorage
+	mutex           sync.RWMutex
+	storageFD       *os.File
 }
 
-var server *serverState
-
-func getHandler(w http.ResponseWriter, r *http.Request) {
+func (server *serverState) getHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("getHandler. Goroutines:%v", runtime.NumGoroutine())
 	reqData := protocol.GetRequest{}
 	body, err := ioutil.ReadAll(r.Body)
@@ -62,7 +60,7 @@ func getHandler(w http.ResponseWriter, r *http.Request) {
 
 	key := reqData.Key
 	server.mutex.RLock()
-	value, ok := server.keyValueMap.kv[string(key)]
+	value, ok := server.inMemoryStorage.Kv[string(key)]
 	server.mutex.RUnlock()
 	if ok {
 		fmt.Fprintf(w, "%s", value)
@@ -82,10 +80,10 @@ func errorResponse(w *http.ResponseWriter, err error, code int) error {
 }
 
 func persistUpdate(srv *serverState) error {
-	server.storageFD.Truncate(0)
-	server.storageFD.Seek(0, io.SeekStart)
-	encoder := gob.NewEncoder(server.storageFD)
-	err := encoder.Encode(&srv.keyValueMap)
+	srv.storageFD.Truncate(0)
+	srv.storageFD.Seek(0, io.SeekStart)
+	encoder := gob.NewEncoder(srv.storageFD)
+	err := encoder.Encode(&srv.inMemoryStorage)
 	return err
 }
 
@@ -113,7 +111,7 @@ func sendUpdateToSynchronousFollower(w http.ResponseWriter, reqData protocol.Set
 	return nil
 }
 
-func putHandler(w http.ResponseWriter, r *http.Request) {
+func (server *serverState) putHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("putHander. Goroutines:%v", runtime.NumGoroutine())
 	reqData := protocol.SetRequest{}
 	body, err := ioutil.ReadAll(r.Body)
@@ -125,18 +123,17 @@ func putHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	server.mutex.Lock()
-	_, keyExists := server.keyValueMap.kv[string(reqData.Key)]
+	_, keyExists := server.inMemoryStorage.Kv[string(reqData.Key)]
 	if server.mode == PRIMARY {
 		if addToWAL(server, string(reqData.Key), string(reqData.Value), w) != nil {
 			return
 		}
-	}
-	if server.mode == PRIMARY {
+
 		if sendUpdateToSynchronousFollower(w, reqData) != nil {
 			return
 		}
 	}
-	server.keyValueMap.kv[string(reqData.Key)] = string(reqData.Value)
+	server.inMemoryStorage.Kv[string(reqData.Key)] = string(reqData.Value)
 	err = persistUpdate(server)
 	server.mutex.Unlock()
 	if errorResponse(&w, err, http.StatusInternalServerError) != nil {
@@ -156,7 +153,7 @@ func (srv *serverState) readStorage(filename string) {
 	}
 	defer f.Close()
 	decoder := gob.NewDecoder(f)
-	err = decoder.Decode(&srv.keyValueMap)
+	err = decoder.Decode(&srv.inMemoryStorage)
 	if err != io.EOF && err != nil {
 		panic(fmt.Sprintf("Error decoding storage %s: %s", filename, err))
 	}
@@ -172,29 +169,32 @@ func newServer(mode serverMode, url string) *serverState {
 	var err error
 	var server *serverState
 	if mode == PRIMARY {
-		walFD, err = os.OpenFile(WAL_FILEPATH, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
+		walFD, err = os.OpenFile(WAL_FILEPATH, os.O_WRONLY|os.O_CREATE|os.O_APPEND|os.O_SYNC, 0644)
 		if err != nil {
 			panic(fmt.Sprintf("Error opening WAL file %s", WAL_FILEPATH))
 		}
 	}
 	storageFilename := STORAGE_FILE_PREFIX + fmt.Sprint(mode)
-	storageFD, err := os.OpenFile(storageFilename, os.O_WRONLY|os.O_SYNC, 0644)
-	if err != nil {
-		panic(err)
-	}
 	server = &serverState{
 		walFD:         walFD,
 		walGobEncoder: gob.NewEncoder(walFD),
 		mode:          mode,
-		keyValueMap:   inMemoryStorage{},
-		storageFD:     storageFD,
+		inMemoryStorage: inMemoryStorage{
+			TransactionID: 0,
+			Kv:            map[string]string{},
+		},
+		storageFD: nil,
 	}
 	server.readStorage(storageFilename)
+	server.storageFD, err = os.OpenFile(storageFilename, os.O_WRONLY|os.O_SYNC, 0644)
+	if err != nil {
+		panic(err)
+	}
 	return server
 }
 
 func (srv *serverState) storageFilename() string {
-	return STORAGE_FILE_PREFIX + fmt.Sprint(server.mode)
+	return STORAGE_FILE_PREFIX + fmt.Sprint(srv.mode)
 
 }
 
@@ -202,7 +202,7 @@ func (srv *serverState) shutDown() {
 	if srv.mode == PRIMARY {
 		srv.walFD.Close()
 	}
-	server.storageFD.Close()
+	srv.storageFD.Close()
 }
 
 func main() {
@@ -226,30 +226,38 @@ func main() {
 		usage()
 	}
 
-	server = newServer(mode, url)
+	server := newServer(mode, url)
 	defer server.shutDown()
 
 	fmt.Printf("Welcome to the distributed K-V store server in %s mode\n", server.mode)
 	fmt.Printf("Listening on: %s\n", url)
 	fmt.Printf("Using storage file: %s\n", server.storageFilename())
 
-	http.HandleFunc("/get", getHandler)
+	http.HandleFunc("/get", server.getHandler)
 	// Idea is that writes should be accepted only by the primary node,
 	// but it is not enforced, since we do not have any auth anyway
-	http.HandleFunc("/put", putHandler)
+	http.HandleFunc("/put", server.putHandler)
 
 	http.HandleFunc("/async-catchup", server.walGetHandler)
 
 	http.ListenAndServe(url, nil)
-	//TODO: primary should write WAL
-	//TODO: followers should not write WAL
+	//TODO: primary should write WAL +
+	//TODO: followers should not write WAL+
 
 	//TODO: create a new endpoint on primary to let async
-	//      followers to request all transactions since N
+	//      followers to request all transactions since N+
 
 	//TODO: master replays WAL, and responds with k,v list
-	//      of resulting change + id of the latest transaction
+	//      of resulting change + id of the latest transaction+
 	//TODO: async follower pulls in a loop, waiting between pulls
+
+	/*	req, err := http.NewRequest(http.MethodGet, URL+"/get", nil)
+		must(err)
+		q := req.URL.Query()
+		q.Add("key", key)
+		req.URL.RawQuery = q.Encode()
+	*/
+
 	//TODO: async follower should store latest applied transaction
 	//      id in a file
 }
