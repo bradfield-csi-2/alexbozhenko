@@ -243,16 +243,4 @@ func main() {
 	http.HandleFunc("/async-catchup", server.walGetHandler)
 
 	http.ListenAndServe(url, nil)
-	//TODO: primary should write WAL +
-	//TODO: followers should not write WAL+
-
-	//TODO: create a new endpoint on primary to let async
-	//      followers to request all transactions since N+
-
-	//TODO: master replays WAL, and responds with k,v list
-	//      of resulting change + id of the latest transaction+
-	//TODO: async follower pulls in a loop, waiting between pulls
-
-	//TODO: async follower should store latest applied transaction
-	//      id in a file
 }
