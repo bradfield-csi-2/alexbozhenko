@@ -156,7 +156,7 @@ func (srv *serverState) readStorage(filename string) {
 }
 
 func usage() {
-	fmt.Fprintf(os.Stderr, "usage: server <primary|sync_follower|async_follower>\n")
+	fmt.Fprintf(os.Stderr, "usage: server <primary|primary_single|sync_follower|async_follower>\n")
 	os.Exit(1)
 }
 
@@ -212,6 +212,9 @@ func main() {
 	case "primary":
 		mode = PRIMARY
 		url = PRIMARY_URL
+	case "primary_single":
+		mode = PRIMARY_SINGLE
+		url = PRIMARY_URL
 	case "sync_follower":
 		mode = SYNCHRONOUS_FOLLOWER
 		url = SYNC_FOLLOWER_URL
@@ -244,3 +247,6 @@ func main() {
 
 	http.ListenAndServe(url, nil)
 }
+
+// TODO: add partitioning function with hardcoded number of nodes
+// TODO: make server to check the partition number and forward request
