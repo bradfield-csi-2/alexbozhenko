@@ -91,7 +91,8 @@ func (server *serverState) pullPrimaryForUpdatesForever() {
 }
 
 func (server *serverState) pullPrimaryForUpdates() {
-	req, err := http.NewRequest(http.MethodGet, "http://"+PRIMARY_URL+"/async-catchup", nil)
+	req, err := http.NewRequest(http.MethodGet, "http://"+
+		SERVER+":"+fmt.Sprint(PRIMARY_PORT)+"/async-catchup", nil)
 	if err != nil {
 		fmt.Fprint(os.Stderr, err)
 		return

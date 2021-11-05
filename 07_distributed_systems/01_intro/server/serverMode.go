@@ -13,7 +13,7 @@ func (mode serverMode) String() string {
 	case PRIMARY:
 		return "primary"
 	case PRIMARY_SINGLE:
-		return "primary_single"
+		return "primary_partition"
 	case SYNCHRONOUS_FOLLOWER:
 		return "sync_follower"
 	case ASYNCHRONOUS_FOLLOWER:

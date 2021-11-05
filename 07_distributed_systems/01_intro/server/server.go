@@ -11,15 +11,16 @@ import (
 	"net/http"
 	"os"
 	"runtime"
+	"strconv"
 	"sync"
 )
 
 const (
 	SERVER                     = "127.0.0.1"
-	PRIMARY_PORT               = "8000"
+	PRIMARY_PORT               = 8000
+	PARTITION_PORT_OFFSET      = 1000
 	SYNCHRONOUS_FOLLOWER_PORT  = "8001"
 	ASYNCHRONOUS_FOLLOWER_PORT = "8002"
-	PRIMARY_URL                = SERVER + ":" + PRIMARY_PORT
 	SYNC_FOLLOWER_URL          = SERVER + ":" + SYNCHRONOUS_FOLLOWER_PORT
 	ASYNC_FOLLOWER_URL         = SERVER + ":" + ASYNCHRONOUS_FOLLOWER_PORT
 	STORAGE_FILE_PREFIX        = "storage_"
@@ -156,7 +157,7 @@ func (srv *serverState) readStorage(filename string) {
 }
 
 func usage() {
-	fmt.Fprintf(os.Stderr, "usage: server <primary|primary_single|sync_follower|async_follower>\n")
+	fmt.Fprintf(os.Stderr, "usage: server <primary|primary_partition node_number|sync_follower|async_follower>\n")
 	os.Exit(1)
 }
 
@@ -203,18 +204,29 @@ func (srv *serverState) shutDown() {
 
 func main() {
 	nArgs := len(os.Args)
-	if nArgs != 2 {
+	if nArgs < 2 {
 		usage()
 	}
 	var url string
+
+	var err error
 	var mode serverMode
+	var nodeNumber int
 	switch os.Args[1] {
 	case "primary":
 		mode = PRIMARY
-		url = PRIMARY_URL
-	case "primary_single":
+		url = SERVER + ":" + fmt.Sprint(PRIMARY_PORT)
+	case "primary_partition":
+		if nArgs != 3 {
+			usage()
+		}
+		nodeNumber, err = strconv.Atoi(os.Args[2])
+		if err != nil {
+			usage()
+		}
 		mode = PRIMARY_SINGLE
-		url = PRIMARY_URL
+		url = SERVER + ":" + fmt.Sprint(PRIMARY_PORT+PARTITION_PORT_OFFSET*nodeNumber)
+
 	case "sync_follower":
 		mode = SYNCHRONOUS_FOLLOWER
 		url = SYNC_FOLLOWER_URL
@@ -249,4 +261,4 @@ func main() {
 }
 
 // TODO: add partitioning function with hardcoded number of nodes
-// TODO: make server to check the partition number and forward request
+// TODO: make server to check the partition number and forward requests
