@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"kv_store/helpers"
 	"kv_store/protocol"
 	"net/http"
 	"os"
@@ -15,16 +16,9 @@ import (
 const (
 	SERVER = "127.0.0.1"
 	PORT   = "8000"
-	URL    = "http://" + SERVER + ":" + PORT
 )
 
-func panicOnError(err error) {
-	if err != nil {
-		panic(err)
-	}
-}
-
-// abozhenko for oz: Is it ok to use http at all?
+var url string
 
 func get(key string) (response string, err error) {
 	//TODO: re-use tcp connection for entire repl session?
@@ -33,19 +27,16 @@ func get(key string) (response string, err error) {
 	}
 	reqBytes := getRequest.Encode()
 
-	//abozhenko for oz: Do you think it is ok to use get request body?
-	// I saw some discussion here
-	// https://stackoverflow.com/questions/978061/http-get-with-request-body
-	// but I haven't form my own opinion
-	req, err := http.NewRequest(http.MethodGet, URL+"/get",
+	req, err := http.NewRequest(http.MethodGet, url+"/get",
 		bytes.NewReader(reqBytes))
-	panicOnError(err)
+	helpers.PanicOnError(err)
 	req.Header.Set("Content-Type", "application/octet-stream")
 
 	start := time.Now()
 	resp, err := http.DefaultClient.Do(req)
 	elapsed := time.Since(start)
-	panicOnError(err)
+	helpers.PanicOnError(err)
+
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
 	return string(body) + " <" + fmt.Sprintf("%4.2f", float64(elapsed)/1_000_000.0) + "ms>", err
@@ -57,19 +48,13 @@ func set(key, value string) (response string, err error) {
 		Value: []byte(value),
 	}
 	reqBytes := setRequest.Encode()
-	// bytes.NewReader copies the []byte, right?
-	// No, it does not! https://stackoverflow.com/a/39993797/1572363
-	// You should've known.
-
-	// abozhenko for oz: Is it ok to simply use different endpoints for
-	// gets and puts ?
-	req, err := http.NewRequest(http.MethodPut, URL+"/put",
+	req, err := http.NewRequest(http.MethodPut, url+"/put",
 		bytes.NewReader(reqBytes))
 	req.Header.Set("Content-Type", "application/octet-stream")
 	start := time.Now()
 	resp, err := http.DefaultClient.Do(req)
 	elapsed := time.Since(start)
-	panicOnError(err)
+	helpers.PanicOnError(err)
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
 	return string(body) + " <" + fmt.Sprintf("%4.2f", float64(elapsed)/1_000_000.0) + "ms>", err
@@ -89,7 +74,18 @@ func parseCommand(getRE, putRE *regexp.Regexp, userInput []byte) (verb, key, val
 	return
 }
 
+func usage() {
+	fmt.Fprintf(os.Stderr, "usage: client HOST PORT\n")
+	os.Exit(1)
+}
+
 func main() {
+	if len(os.Args) != 3 {
+		usage()
+	}
+	host := os.Args[1]
+	port := os.Args[2]
+	url = "http://" + host + ":" + port
 	getRE := regexp.MustCompile(`(get) ([^=]+)$`)
 	putRE := regexp.MustCompile(`(set) ([^=]+)=(.*)`)
 

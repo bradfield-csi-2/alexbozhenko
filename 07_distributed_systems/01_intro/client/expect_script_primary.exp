@@ -1,7 +1,7 @@
 #!/usr/bin/expect -f
 
 set timeout -1
-spawn ./client
+spawn ./client 127.0.0.1 8000
 match_max 100000
 expect -exact "Welcome to the distributed K-V store client\r
 We support the following syntax:\r
