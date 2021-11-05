@@ -106,9 +106,6 @@ func (server *serverState) pullPrimaryForUpdates() {
 		return
 	}
 	defer resp.Body.Close()
-	//	body, err := io.ReadAll(resp.Body)
-	//fmt.Printf("%s", hex.Dump(body))
-	//return
 	decoder := gob.NewDecoder(resp.Body)
 	catchUpRecords := inMemoryStorage{
 		TransactionID: 0,
