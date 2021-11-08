@@ -8,7 +8,8 @@ import (
 )
 
 const PARTITIONS = 640_000
-const NODES_NUMBER = 3
+
+//const NODES_NUMBER = 3
 
 // Terminology:
 // Node - a physical server, responsible for subset of keys
@@ -23,8 +24,8 @@ type consistentHashRing struct {
 	nodes map[string]string
 }
 
-func NewConsistentHashRing(replicas int) *consistentHashRing {
-	rHashes := make([][md5.Size]byte, replicas*NODES_NUMBER)
+func NewConsistentHashRing(replicas, nodeNumber int) *consistentHashRing {
+	rHashes := make([][md5.Size]byte, 0)
 	return &consistentHashRing{
 		replicas:       replicas,
 		replicasHashes: rHashes,
@@ -38,12 +39,15 @@ func (c *consistentHashRing) addNode(nodeName string, nodeValue string) {
 		replicaHash := replicaHashArray[:]
 		index := sort.Search(len(c.replicasHashes),
 			func(i int) bool {
-				return (bytes.Compare(c.replicasHashes[i][:], replicaHash) >= 0)
+				res := bytes.Compare(c.replicasHashes[i][:], replicaHash)
+				return res >= 0
 			})
+
 		c.replicasHashes = append(append(c.replicasHashes[:index][:], replicaHashArray),
-			c.replicasHashes[index+1:]...)
+			c.replicasHashes[index:]...)
+
+		c.nodes[string(replicaHash)] = nodeValue
 	}
-	c.nodes[nodeName] = nodeValue
 }
 
 func (c *consistentHashRing) deleteNode(nodeName string) {
@@ -68,8 +72,10 @@ func (c *consistentHashRing) getNode(key string) (nodeName string, nodeValue str
 	var index int
 	index = sort.Search(len(c.replicasHashes),
 		func(i int) bool {
-			return (bytes.Equal(c.replicasHashes[i][:], keyHash[:]))
+			res := bytes.Compare(c.replicasHashes[i][:], keyHash[:])
+			return res >= 0
 		})
+
 	if index == len(c.replicasHashes) {
 		// Special case to connect end of the hash function range
 		// to the beginning to create a "ring"
