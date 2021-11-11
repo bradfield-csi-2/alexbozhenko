@@ -18,6 +18,12 @@ type replicaHashWithNodeName struct {
 	hash [md5.Size]byte
 	// Name of the related node
 	nodeName string
+	//replicaNumber is used just for debug
+	replicaNumber int
+}
+
+func (r replicaHashWithNodeName) String() string {
+	return fmt.Sprintf("%x => %s:%d\n", r.hash, r.nodeName, r.replicaNumber)
 }
 
 type consistentHashRing struct {
@@ -47,8 +53,9 @@ func (c *consistentHashRing) addNode(nodeName string, nodeValue string) {
 	for replicaNumber := 0; replicaNumber < c.replicas; replicaNumber++ {
 		replicaHashArray := replicaHash(nodeName, replicaNumber)
 		replicaHash := replicaHashWithNodeName{
-			hash:     replicaHashArray,
-			nodeName: nodeName,
+			hash:          replicaHashArray,
+			nodeName:      nodeName,
+			replicaNumber: replicaNumber,
 		}
 		index := sort.Search(len(c.replicasHashes),
 			func(i int) bool {
