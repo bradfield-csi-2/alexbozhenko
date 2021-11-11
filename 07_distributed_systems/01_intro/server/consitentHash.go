@@ -14,12 +14,22 @@ const PARTITIONS = 640_000
 // Terminology:
 // Node - a physical server, responsible for subset of keys
 
+type replicaHashWithNodeName struct {
+	// hash of replicaName, where
+	// replicaName constructed like this:
+	// nodeName:%d
+	// where d is replica number
+	hash [md5.Size]byte
+	// Name of the related node
+	nodeName string
+}
+
 type consistentHashRing struct {
 	// how many times we create points on the hash ring for each node
 	replicas int
-	// Sorted array of hashes of all nodes
-	replicasHashes [][md5.Size]byte
-	// Map from node name to nodeValue, where
+	// Slice is sorted by replicaHash
+	replicasHashes []replicaHashWithNodeName
+	// Map from nodeName to nodeValue, where
 	// nodeValue can be anything you want, e.g. an url
 	nodes map[string]string
 }
