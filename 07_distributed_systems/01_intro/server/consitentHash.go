@@ -7,10 +7,6 @@ import (
 	"sort"
 )
 
-const PARTITIONS = 640_000
-
-//const NODES_NUMBER = 3
-
 // Terminology:
 // Node - a physical server, responsible for subset of keys
 
@@ -27,7 +23,7 @@ type replicaHashWithNodeName struct {
 type consistentHashRing struct {
 	// how many times we create points on the hash ring for each node
 	replicas int
-	// Slice is sorted by replicaHash
+	// Slice of numNodes*numReplicas hashes, that is sorted by replicaHash
 	replicasHashes []replicaHashWithNodeName
 	// Map from nodeName to nodeValue, where
 	// nodeValue can be anything you want, e.g. an url
@@ -60,9 +56,9 @@ func (c *consistentHashRing) addNode(nodeName string, nodeValue string) {
 				return res >= 0
 			})
 
-		c.replicasHashes = append(append(c.replicasHashes[:index][:],
-			replicaHash),
-			c.replicasHashes[index:]...)
+		c.replicasHashes = append(c.replicasHashes, replicaHashWithNodeName{})
+		copy(c.replicasHashes[index+1:], c.replicasHashes[index:])
+		c.replicasHashes[index] = replicaHash
 	}
 	c.nodes[nodeName] = nodeValue
 }
@@ -106,4 +102,8 @@ func (c *consistentHashRing) getNode(key string) (nodeName string, nodeValue str
 
 	return
 
+}
+
+func (c *consistentHashRing) String() string {
+	return fmt.Sprint(c.replicasHashes)
 }
