@@ -13,9 +13,9 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-const NUM_REPLICAS int = 100
-const NUM_KEYS_TO_ADD int = 1_000_00
-const NUM_NODES int = 3
+const NUM_REPLICAS int = 500
+const NUM_KEYS_TO_ADD int = 100_000
+const NUM_NODES int = 5
 const ACCEPTABLE_VARIANCE = 0.2
 const KEY_LENGTH = 16
 
@@ -46,11 +46,11 @@ func TestConsistentHashRing(t *testing.T) {
 	sort.Slice(tmpKeys, func(i, j int) bool {
 		return (bytes.Compare(tmpKeys[i].hash[:], tmpKeys[j].hash[:]) == -1)
 	})
-	for _, rH := range tmpKeys {
-		t.Logf("Adding hash(key):%x to %s", rH.hash, rH.nodeName)
+	for _, _ = range tmpKeys {
+		//	t.Logf("Adding hash(key):%x to %s", rH.hash, rH.nodeName)
 	}
 
-	t.Log(hashRing)
+	//t.Log(hashRing)
 	t.Log(fmt.Sprint(nodesToKeysCounter))
 	var mean float64
 	var observedNodesNumber int = len(nodesToKeysCounter)

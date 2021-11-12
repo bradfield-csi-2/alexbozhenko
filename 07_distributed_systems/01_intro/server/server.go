@@ -25,6 +25,10 @@ const (
 	ASYNC_FOLLOWER_URL         = SERVER + ":" + ASYNCHRONOUS_FOLLOWER_PORT
 	STORAGE_FILE_PREFIX        = "storage_"
 	WAL_FILEPATH               = "wal"
+
+	//Consistent Hash Ring config:
+	CHR_NODES_NUMBER        = 3
+	CHR_PARTITIONS_PER_NODE = 100
 )
 
 type inMemoryStorage struct {
@@ -39,6 +43,8 @@ type serverState struct {
 	inMemoryStorage inMemoryStorage
 	mutex           sync.RWMutex
 	storageFD       *os.File
+	hashRing        *consistentHashRing
+	url             string
 }
 
 func (server *serverState) getHandler(w http.ResponseWriter, r *http.Request) {
@@ -54,6 +60,35 @@ func (server *serverState) getHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	key := reqData.Key
+	nodeNameForCurrentKey, urlForCurrentKey := server.hashRing.getNode(string(key))
+	if urlForCurrentKey != server.url {
+		log.Printf("redirecting %s key read request to node %s", key, nodeNameForCurrentKey)
+		req, err := http.NewRequest(http.MethodGet, urlForCurrentKey+"/get",
+			bytes.NewReader(body))
+		if errorResponse(&w, err, http.StatusInternalServerError) != nil {
+			return
+		}
+		req.Header.Set("Content-Type", "application/octet-stream")
+		resp, err := http.DefaultClient.Do(req)
+		if errorResponse(&w, err, http.StatusInternalServerError) != nil {
+			return
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			err = fmt.Errorf("got %d(%s) from redirected read request",
+				resp.StatusCode,
+				http.StatusText(resp.StatusCode))
+			errorResponse(&w, err, http.StatusInternalServerError)
+			return
+		}
+		body, err := io.ReadAll(resp.Body)
+		if errorResponse(&w, err, http.StatusInternalServerError) != nil {
+			return
+		}
+		fmt.Fprintf(w, "%s", body)
+		return
+	}
+
 	server.mutex.RLock()
 	value, ok := server.inMemoryStorage.Kv[string(key)]
 	server.mutex.RUnlock()
@@ -181,6 +216,14 @@ func newServer(mode serverMode, url string) *serverState {
 			Kv:            map[string]string{},
 		},
 		storageFD: nil,
+		hashRing:  NewConsistentHashRing(CHR_PARTITIONS_PER_NODE, CHR_NODES_NUMBER),
+		url:       url,
+	}
+	for i := 0; i < CHR_NODES_NUMBER; i++ {
+		server.hashRing.addNode(
+			fmt.Sprintf("node:%d", i),
+			getNodeUrl(i),
+		)
 	}
 	server.readStorage(storageFilename)
 	server.storageFD, err = os.OpenFile(storageFilename, os.O_WRONLY|os.O_SYNC, 0644)
@@ -200,6 +243,10 @@ func (srv *serverState) shutDown() {
 		srv.walFD.Close()
 	}
 	srv.storageFD.Close()
+}
+
+func getNodeUrl(nodeNumber int) string {
+	return SERVER + ":" + fmt.Sprint(PRIMARY_PORT+PARTITION_PORT_OFFSET*nodeNumber)
 }
 
 func main() {
@@ -225,7 +272,7 @@ func main() {
 			usage()
 		}
 		mode = PRIMARY_SINGLE
-		url = SERVER + ":" + fmt.Sprint(PRIMARY_PORT+PARTITION_PORT_OFFSET*nodeNumber)
+		url = getNodeUrl(nodeNumber)
 
 	case "sync_follower":
 		mode = SYNCHRONOUS_FOLLOWER
@@ -260,5 +307,4 @@ func main() {
 	http.ListenAndServe(url, nil)
 }
 
-// TODO: add partitioning function with hardcoded number of nodes
 // TODO: make server to check the partition number and forward requests
