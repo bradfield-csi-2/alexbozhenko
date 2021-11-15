@@ -1,14 +1,13 @@
-Educational key-value store.
-
-Let's start with map serialized to disk using Gob, 
-and available for `get`s and `set`s via http endpoint
+"Distributed" key-value store built for educational purposes.
 
 Usage:
-1. Start a server in one window:
+1. Start 3 server nodes in separate windows, each responsible for 
 ```
-server$ go run .
-Welcome to the distributed K-V store serv
+server$ go run . primary_partition 0
+server$ go run . primary_partition 1
+server$ go run . primary_partition 2
 ```
+
 2. Start clients in other windows:
 ```
 client$ go run .
@@ -23,9 +22,11 @@ Out[1]: foofoo
 ```
 You can also run expect script:
 ```
-client$ go build; expect expect_script.exp
+client$ go build; expect expect_script_primary.exp 8000
 ```
 Or do it in parallel with `clush`:
 ```
-client$ go build; clush -f 100  -R exec -w [1-100] expect expect_script.exp
+client$ go build; clush -f 100  -R exec -w [1-10] expect expect_script_primary.exp 8000
 ```
+
+In server logs you will see that requests are redirected using consistent hashing algorithm.

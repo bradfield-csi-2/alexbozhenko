@@ -5,14 +5,11 @@ import (
 	"encoding/gob"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"kv_store/helpers"
 	"kv_store/protocol"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
-	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -24,8 +21,8 @@ const (
 	PARTITION_PORT_OFFSET      = 1000
 	SYNCHRONOUS_FOLLOWER_PORT  = "8001"
 	ASYNCHRONOUS_FOLLOWER_PORT = "8002"
-	SYNC_FOLLOWER_URL          = SERVER + ":" + SYNCHRONOUS_FOLLOWER_PORT
-	ASYNC_FOLLOWER_URL         = SERVER + ":" + ASYNCHRONOUS_FOLLOWER_PORT
+	SYNC_FOLLOWER_URL          = "http://" + SERVER + ":" + SYNCHRONOUS_FOLLOWER_PORT
+	ASYNC_FOLLOWER_URL         = "http://" + SERVER + ":" + ASYNCHRONOUS_FOLLOWER_PORT
 	STORAGE_FILE_PREFIX        = "storage"
 	WAL_FILEPATH               = "wal"
 
@@ -50,68 +47,6 @@ type serverState struct {
 	url             string
 }
 
-func (server *serverState) getHandler(w http.ResponseWriter, r *http.Request) {
-	log.Printf("getHandler. Goroutines:%v", runtime.NumGoroutine())
-	reqData := protocol.GetRequest{}
-	body, err := ioutil.ReadAll(r.Body)
-	if errorResponse(&w, err, http.StatusBadRequest) != nil {
-		return
-	}
-	err = reqData.Decode(body)
-	if errorResponse(&w, err, http.StatusBadRequest) != nil {
-		return
-	}
-
-	key := reqData.Key
-	nodeNameForCurrentKey, urlForCurrentKey := server.hashRing.getNode(string(key))
-	if urlForCurrentKey != server.url {
-		log.Printf("redirecting %s key read request to node %s", key, nodeNameForCurrentKey)
-		req, err := http.NewRequest(http.MethodGet, urlForCurrentKey+"/get",
-			bytes.NewReader(body))
-		if errorResponse(&w, err, http.StatusInternalServerError) != nil {
-			return
-		}
-		req.Header.Set("Content-Type", "application/octet-stream")
-		resp, err := http.DefaultClient.Do(req)
-		if errorResponse(&w, err, http.StatusInternalServerError) != nil {
-			return
-		}
-		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			err = fmt.Errorf("got %d(%s) from redirected read request",
-				resp.StatusCode,
-				http.StatusText(resp.StatusCode))
-			errorResponse(&w, err, http.StatusInternalServerError)
-			return
-		}
-		body, err := io.ReadAll(resp.Body)
-		if errorResponse(&w, err, http.StatusInternalServerError) != nil {
-			return
-		}
-		fmt.Fprintf(w, "%s", body)
-		return
-	}
-
-	server.mutex.RLock()
-	value, ok := server.inMemoryStorage.Kv[string(key)]
-	server.mutex.RUnlock()
-	if ok {
-		fmt.Fprintf(w, "%s", value)
-	} else {
-		fmt.Fprintf(w, "key %s NOT FOUND", key)
-	}
-}
-
-func errorResponse(w *http.ResponseWriter, err error, code int) error {
-	if err != nil {
-		message := fmt.Sprintf("%s: %s", http.StatusText(code), err)
-		(*w).WriteHeader(code)
-		(*w).Write([]byte(message))
-		return err
-	}
-	return nil
-}
-
 // This function must be called only when
 // srv.mutex is locked
 func persistUpdateWithLockedMutex(srv *serverState) error {
@@ -127,12 +62,12 @@ func sendUpdateToSynchronousFollower(w http.ResponseWriter, reqData protocol.Set
 	reqBytes := reqData.Encode()
 	req, err := http.NewRequest(http.MethodPut, "http://"+SYNC_FOLLOWER_URL+"/put",
 		bytes.NewReader(reqBytes))
-	if errorResponse(&w, err, http.StatusInternalServerError) != nil {
+	if helpers.ErrorResponse(&w, err, http.StatusInternalServerError) != nil {
 		return err
 	}
 	req.Header.Set("Content-Type", "application/octet-stream")
 	resp, err := http.DefaultClient.Do(req)
-	if errorResponse(&w, err, http.StatusInternalServerError) != nil {
+	if helpers.ErrorResponse(&w, err, http.StatusInternalServerError) != nil {
 		return err
 	}
 	defer resp.Body.Close()
@@ -140,45 +75,10 @@ func sendUpdateToSynchronousFollower(w http.ResponseWriter, reqData protocol.Set
 		err = fmt.Errorf("got %d(%s) from synchornous replica. Not proceeding with the write",
 			resp.StatusCode,
 			http.StatusText(resp.StatusCode))
-		errorResponse(&w, err, http.StatusInternalServerError)
+		helpers.ErrorResponse(&w, err, http.StatusInternalServerError)
 		return err
 	}
 	return nil
-}
-
-func (server *serverState) putHandler(w http.ResponseWriter, r *http.Request) {
-	log.Printf("putHander. Goroutines:%v", runtime.NumGoroutine())
-	reqData := protocol.SetRequest{}
-	body, err := ioutil.ReadAll(r.Body)
-	if errorResponse(&w, err, http.StatusBadRequest) != nil {
-		return
-	}
-	err = reqData.Decode(body)
-	if errorResponse(&w, err, http.StatusBadRequest) != nil {
-		return
-	}
-	server.mutex.Lock()
-	_, keyExists := server.inMemoryStorage.Kv[string(reqData.Key)]
-	if server.mode == PRIMARY {
-		if addToWAL(server, string(reqData.Key), string(reqData.Value), w) != nil {
-			return
-		}
-
-		if sendUpdateToSynchronousFollower(w, reqData) != nil {
-			return
-		}
-	}
-	server.inMemoryStorage.Kv[string(reqData.Key)] = string(reqData.Value)
-	err = persistUpdateWithLockedMutex(server)
-	server.mutex.Unlock()
-	if errorResponse(&w, err, http.StatusInternalServerError) != nil {
-		return
-	}
-	if keyExists {
-		w.Write([]byte("UPDATED"))
-	} else {
-		w.Write([]byte("INSERTED"))
-	}
 }
 
 func (srv *serverState) readStorage(filename string) {
@@ -208,7 +108,7 @@ func newServer(mode serverMode, urlString string) *serverState {
 		helpers.PanicOnError(err)
 	}
 	port := ""
-	u, err := url.ParseRequestURI("http://" + urlString)
+	u, err := url.ParseRequestURI(urlString)
 	helpers.PanicOnError(err)
 	if mode == PRIMARY_PARTITION {
 		port = u.Port()
@@ -230,7 +130,7 @@ func newServer(mode serverMode, urlString string) *serverState {
 	for i := 0; i < CHR_NODES_NUMBER; i++ {
 		server.hashRing.addNode(
 			fmt.Sprintf("node:%d", i),
-			getNodeUrl(i),
+			getNodeUrl(i).String(),
 		)
 	}
 	server.readStorage(storageFilename)
@@ -252,9 +152,12 @@ func (srv *serverState) shutDown() {
 	srv.storageFD.Close()
 }
 
-func getNodeUrl(nodeNumber int) string {
-	return SERVER + ":" +
-		fmt.Sprint(PRIMARY_PORT+PARTITION_PORT_OFFSET*nodeNumber)
+func getNodeUrl(nodeNumber int) *url.URL {
+	url, err := url.Parse("http://" + SERVER + ":" +
+		fmt.Sprint(PRIMARY_PORT+PARTITION_PORT_OFFSET*nodeNumber))
+	helpers.PanicOnError(err)
+	return url
+
 }
 
 func main() {
@@ -262,7 +165,7 @@ func main() {
 	if nArgs < 2 {
 		usage()
 	}
-	var url string
+	var serverUrl *url.URL
 
 	var err error
 	var mode serverMode
@@ -270,7 +173,8 @@ func main() {
 	switch os.Args[1] {
 	case "primary":
 		mode = PRIMARY
-		url = SERVER + ":" + fmt.Sprint(PRIMARY_PORT)
+		serverUrl, err = url.Parse(SERVER + ":" + fmt.Sprint(PRIMARY_PORT))
+		helpers.PanicOnError(err)
 	case "primary_partition":
 		if nArgs != 3 {
 			usage()
@@ -280,23 +184,25 @@ func main() {
 			usage()
 		}
 		mode = PRIMARY_PARTITION
-		url = getNodeUrl(nodeNumber)
+		serverUrl = getNodeUrl(nodeNumber)
 
 	case "sync_follower":
 		mode = SYNCHRONOUS_FOLLOWER
-		url = SYNC_FOLLOWER_URL
+		serverUrl, err = url.Parse(SYNC_FOLLOWER_URL)
+		helpers.PanicOnError(err)
 	case "async_follower":
 		mode = ASYNCHRONOUS_FOLLOWER
-		url = ASYNC_FOLLOWER_URL
+		serverUrl, err = url.Parse(ASYNC_FOLLOWER_URL)
+		helpers.PanicOnError(err)
 	default:
 		usage()
 	}
 
-	server := newServer(mode, url)
+	server := newServer(mode, serverUrl.String())
 	defer server.shutDown()
 
 	fmt.Printf("Welcome to the distributed K-V store server in %s mode\n", server.mode)
-	fmt.Printf("Listening on: %s\n", url)
+	fmt.Printf("Listening on: %s\n", serverUrl)
 	fmt.Printf("Using storage file: %s\n", server.storageFilename())
 
 	http.HandleFunc("/get", server.getHandler)
@@ -312,7 +218,5 @@ func main() {
 
 	http.HandleFunc("/async-catchup", server.walGetHandler)
 
-	http.ListenAndServe(url, nil)
+	http.ListenAndServe(serverUrl.Host, nil)
 }
-
-// TODO: make server to check the partition number and forward requests

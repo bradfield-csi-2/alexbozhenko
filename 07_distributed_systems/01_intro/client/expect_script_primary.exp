@@ -1,27 +1,23 @@
 #!/usr/bin/expect -f
 
 set timeout -1
-spawn ./client 127.0.0.1 8000
+set port [lindex $argv 0];
+spawn ./client 127.0.0.1 $port
 match_max 100000
-expect -exact "Welcome to the distributed K-V store client\r
-We support the following syntax:\r
-get foo\r
-set foo=bar\r
-\r
-In \[1\]: "
 set NUM 1
 
 while { $NUM <= 100 } {
-	send -- "get bar\r"
+	expect "In*"
+	send -- "set bar$NUM=barbar\r"
 	expect "Out*"
 	sleep 0.1
-	send -- "set bar=barbar\r"
+	send -- "get bar$NUM\r"
 	expect "Out*"
 	sleep 0.1
-	send -- "get foo\r"
+	send -- "set foo$NUM=foofoo\r"
 	expect "Out*"
 	sleep 0.1
-	send -- "set foo=foofoo\r"
+	send -- "get foo$NUM\r"
 	expect "Out*"
 	sleep 0.1
 	set NUM [ expr $NUM + 1 ]
