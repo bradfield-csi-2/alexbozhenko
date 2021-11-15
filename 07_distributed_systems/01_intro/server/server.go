@@ -6,12 +6,15 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"kv_store/helpers"
 	"kv_store/protocol"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 )
 
@@ -23,7 +26,7 @@ const (
 	ASYNCHRONOUS_FOLLOWER_PORT = "8002"
 	SYNC_FOLLOWER_URL          = SERVER + ":" + SYNCHRONOUS_FOLLOWER_PORT
 	ASYNC_FOLLOWER_URL         = SERVER + ":" + ASYNCHRONOUS_FOLLOWER_PORT
-	STORAGE_FILE_PREFIX        = "storage_"
+	STORAGE_FILE_PREFIX        = "storage"
 	WAL_FILEPATH               = "wal"
 
 	//Consistent Hash Ring config:
@@ -196,17 +199,22 @@ func usage() {
 	os.Exit(1)
 }
 
-func newServer(mode serverMode, url string) *serverState {
+func newServer(mode serverMode, urlString string) *serverState {
 	var walFD *os.File
 	var err error
 	var server *serverState
 	if mode == PRIMARY {
 		walFD, err = os.OpenFile(WAL_FILEPATH, os.O_WRONLY|os.O_CREATE|os.O_APPEND|os.O_SYNC, 0644)
-		if err != nil {
-			panic(fmt.Sprintf("Error opening WAL file %s", WAL_FILEPATH))
-		}
+		helpers.PanicOnError(err)
 	}
-	storageFilename := STORAGE_FILE_PREFIX + fmt.Sprint(mode)
+	port := ""
+	u, err := url.ParseRequestURI("http://" + urlString)
+	helpers.PanicOnError(err)
+	if mode == PRIMARY_PARTITION {
+		port = u.Port()
+	}
+	storageFilename := strings.Join([]string{STORAGE_FILE_PREFIX, fmt.Sprint(mode), port}, "_")
+
 	server = &serverState{
 		walFD:         walFD,
 		walGobEncoder: gob.NewEncoder(walFD),
@@ -217,7 +225,7 @@ func newServer(mode serverMode, url string) *serverState {
 		},
 		storageFD: nil,
 		hashRing:  NewConsistentHashRing(CHR_PARTITIONS_PER_NODE, CHR_NODES_NUMBER),
-		url:       url,
+		url:       urlString,
 	}
 	for i := 0; i < CHR_NODES_NUMBER; i++ {
 		server.hashRing.addNode(
@@ -234,8 +242,7 @@ func newServer(mode serverMode, url string) *serverState {
 }
 
 func (srv *serverState) storageFilename() string {
-	return STORAGE_FILE_PREFIX + fmt.Sprint(srv.mode)
-
+	return srv.storageFD.Name()
 }
 
 func (srv *serverState) shutDown() {
@@ -246,7 +253,8 @@ func (srv *serverState) shutDown() {
 }
 
 func getNodeUrl(nodeNumber int) string {
-	return SERVER + ":" + fmt.Sprint(PRIMARY_PORT+PARTITION_PORT_OFFSET*nodeNumber)
+	return SERVER + ":" +
+		fmt.Sprint(PRIMARY_PORT+PARTITION_PORT_OFFSET*nodeNumber)
 }
 
 func main() {
@@ -271,7 +279,7 @@ func main() {
 		if err != nil {
 			usage()
 		}
-		mode = PRIMARY_SINGLE
+		mode = PRIMARY_PARTITION
 		url = getNodeUrl(nodeNumber)
 
 	case "sync_follower":
