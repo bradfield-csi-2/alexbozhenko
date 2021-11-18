@@ -22,6 +22,7 @@ import (
 
 const (
 	SERVER                     = "127.0.0.1"
+	ETCD_IP                    = "192.168.1.3"
 	PRIMARY_PORT               = 8000
 	PARTITION_PORT_OFFSET      = 1000
 	SYNCHRONOUS_FOLLOWER_PORT  = "8001"
@@ -30,6 +31,7 @@ const (
 	ASYNC_FOLLOWER_URL         = "http://" + SERVER + ":" + ASYNCHRONOUS_FOLLOWER_PORT
 	STORAGE_FILE_PREFIX        = "storage"
 	WAL_FILEPATH               = "wal"
+	ETCD_KEEPALIVE_PATH_PREFIX = "alive_servers/"
 
 	//Consistent Hash Ring config:
 	CHR_NODES_NUMBER        = 3
@@ -122,11 +124,10 @@ func newServer(mode serverMode, urlString string) *serverState {
 	storageFilename := strings.Join([]string{STORAGE_FILE_PREFIX, fmt.Sprint(mode), port}, "_")
 
 	etcdClient, err := clientv3.New(clientv3.Config{
-		Endpoints:   []string{"0.0.0.0:2379", "0.0.0.0:22379", "0.0.0.0:32379"},
+		Endpoints:   []string{ETCD_IP + ":2379", ETCD_IP + ":22379", ETCD_IP + ":32379"},
 		DialTimeout: 5 * time.Second,
 	})
 	helpers.PanicOnError(err)
-	defer etcdClient.Close()
 	server = &serverState{
 		walFD:         walFD,
 		walGobEncoder: gob.NewEncoder(walFD),
@@ -163,6 +164,7 @@ func (srv *serverState) shutDown() {
 		srv.walFD.Close()
 	}
 	srv.storageFD.Close()
+	srv.etcdClient.Close()
 }
 
 func getNodeUrl(nodeNumber int) *url.URL {
@@ -177,13 +179,18 @@ func (server *serverState) sendKeepAliveToEtcd() {
 	leaseGrantResponse, err := server.etcdClient.Grant(context.TODO(), 5)
 	helpers.PanicOnError(err)
 	_, err = server.etcdClient.Put(
-		context.TODO(), server.url, "1", clientv3.WithLease(leaseGrantResponse.ID),
+		context.TODO(), ETCD_KEEPALIVE_PATH_PREFIX+server.url, "It's Alive!",
+		clientv3.WithLease(leaseGrantResponse.ID),
 	)
 	helpers.PanicOnError(err)
-	ch, err := server.etcdClient.KeepAlive(context.TODO(), leaseGrantResponse.ID)
+	keepAliveResponseChannel, err := server.etcdClient.KeepAlive(context.TODO(), leaseGrantResponse.ID)
 	helpers.PanicOnError(err)
-	keepAlive := <-ch
-	log.Println(keepAlive.TTL)
+	for {
+		select {
+		case <-keepAliveResponseChannel:
+			log.Println("Got keepAliveResponse from etcd")
+		}
+	}
 }
 
 func main() {
@@ -244,6 +251,11 @@ func main() {
 
 	http.HandleFunc("/async-catchup", server.walGetHandler)
 
-	http.ListenAndServe(serverUrl.Host, nil)
 	go server.sendKeepAliveToEtcd()
+	// TODO: alexbozhenko for Oz:
+	// Is this a race condition?
+	// We start sending KeepAlives before server got a chance to start listening
+	// What will be the proper way of start sending keepAlives only
+	// after we started listening?
+	http.ListenAndServe(serverUrl.Host, nil)
 }
