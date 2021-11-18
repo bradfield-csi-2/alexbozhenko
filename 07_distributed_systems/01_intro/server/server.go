@@ -2,11 +2,13 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/gob"
 	"fmt"
 	"io"
 	"kv_store/helpers"
 	"kv_store/protocol"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -171,6 +173,19 @@ func getNodeUrl(nodeNumber int) *url.URL {
 
 }
 
+func (server *serverState) sendKeepAliveToEtcd() {
+	leaseGrantResponse, err := server.etcdClient.Grant(context.TODO(), 5)
+	helpers.PanicOnError(err)
+	_, err = server.etcdClient.Put(
+		context.TODO(), server.url, "1", clientv3.WithLease(leaseGrantResponse.ID),
+	)
+	helpers.PanicOnError(err)
+	ch, err := server.etcdClient.KeepAlive(context.TODO(), leaseGrantResponse.ID)
+	helpers.PanicOnError(err)
+	keepAlive := <-ch
+	log.Println(keepAlive.TTL)
+}
+
 func main() {
 	nArgs := len(os.Args)
 	if nArgs < 2 {
@@ -230,4 +245,5 @@ func main() {
 	http.HandleFunc("/async-catchup", server.walGetHandler)
 
 	http.ListenAndServe(serverUrl.Host, nil)
+	go server.sendKeepAliveToEtcd()
 }
