@@ -13,6 +13,9 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
+
+	"go.etcd.io/etcd/clientv3"
 )
 
 const (
@@ -45,6 +48,7 @@ type serverState struct {
 	storageFD       *os.File
 	hashRing        *consistentHashRing
 	url             string
+	etcdClient      *clientv3.Client
 }
 
 // This function must be called only when
@@ -115,6 +119,12 @@ func newServer(mode serverMode, urlString string) *serverState {
 	}
 	storageFilename := strings.Join([]string{STORAGE_FILE_PREFIX, fmt.Sprint(mode), port}, "_")
 
+	etcdClient, err := clientv3.New(clientv3.Config{
+		Endpoints:   []string{"0.0.0.0:2379", "0.0.0.0:22379", "0.0.0.0:32379"},
+		DialTimeout: 5 * time.Second,
+	})
+	helpers.PanicOnError(err)
+	defer etcdClient.Close()
 	server = &serverState{
 		walFD:         walFD,
 		walGobEncoder: gob.NewEncoder(walFD),
@@ -123,9 +133,10 @@ func newServer(mode serverMode, urlString string) *serverState {
 			TransactionID: 0,
 			Kv:            map[string]string{},
 		},
-		storageFD: nil,
-		hashRing:  NewConsistentHashRing(CHR_PARTITIONS_PER_NODE, CHR_NODES_NUMBER),
-		url:       urlString,
+		storageFD:  nil,
+		hashRing:   NewConsistentHashRing(CHR_PARTITIONS_PER_NODE, CHR_NODES_NUMBER),
+		url:        urlString,
+		etcdClient: etcdClient,
 	}
 	for i := 0; i < CHR_NODES_NUMBER; i++ {
 		server.hashRing.addNode(
