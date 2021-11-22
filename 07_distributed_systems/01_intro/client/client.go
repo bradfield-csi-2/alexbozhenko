@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"sort"
 	"time"
 
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -23,20 +24,81 @@ const (
 	ETCD_IP = "192.168.1.3"
 )
 
-func updateConsistenHashRingWithAliveNodes() {
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+// Returns slice of elements present in a but not in b
+func sortedSliceDifference(a, b []string) []string {
+	var aPos, bPos int
+	difference := []string{}
+
+	for aPos, bPos = 0, 0; aPos < len(a) && bPos < len(b); {
+		if a[aPos] < b[bPos] {
+			difference = append(difference, a[aPos])
+			aPos++
+		} else if a[aPos] == b[bPos] {
+			aPos++
+			bPos++
+		} else {
+			bPos++
+		}
+	}
+
+	for ; aPos < len(a); aPos++ {
+		difference = append(difference, a[aPos])
+	}
+	return difference
+}
+
+func updateConsistenHashRingWithAliveNodes(etcdClient *clientv3.Client,
+	consistentHashRing *consistenHash.ConsistentHashRing) {
+	existingNodesMap := consistentHashRing.GetNodes()
+	existingNodes := make([]string, len(existingNodesMap))
+	i := 0
+	for k := range existingNodesMap {
+		existingNodes[i] = k
+		i++
+	}
+
+	sort.Slice(existingNodes, func(i, j int) bool {
+		return existingNodes[i] < existingNodes[j]
+	})
 	etcdResponse, err := etcdClient.Get(context.TODO(), "alive_servers",
 		clientv3.WithPrefix(), clientv3.WithSort(clientv3.SortByKey, clientv3.SortAscend))
+	helpers.PanicOnError(err) // In reality, should retry with timeout
+
+	validNodesFromEtcd := []string{}
+
+	etcdNodesMap := make(map[string]string)
 	for _, ev := range etcdResponse.Kvs {
 		parsedUrl, err := url.Parse(string(ev.Value))
 		if err == nil {
-			consistenHashRing.AddNode(parsedUrl.String(), parsedUrl.String())
-			fmt.Printf("Got node from etcd list of alive nodes. Adding it: %s\n", string(ev.Value))
+			validNodesFromEtcd = append(validNodesFromEtcd, parsedUrl.String())
+			etcdNodesMap[parsedUrl.String()] = parsedUrl.String()
 		}
+	}
+	log.Println("existing", existingNodes)
+	log.Println("etcd", validNodesFromEtcd)
+
+	nodesToAdd := sortedSliceDifference(validNodesFromEtcd, existingNodes)
+	nodesToDelete := sortedSliceDifference(existingNodes, validNodesFromEtcd)
+	for _, node := range nodesToAdd {
+		fmt.Printf("Got node from etcd list of alive nodes. Adding it: %s\n", etcdNodesMap[node])
+		consistentHashRing.AddNode(string(etcdNodesMap[node]), string(etcdNodesMap[node]))
+	}
+	for _, node := range nodesToDelete {
+		fmt.Printf("Node is not present in etcd. Removing it: %s\n", node)
+		consistentHashRing.DeleteNode(node)
 	}
 
 }
 
-func get(key string, consistenHashRing *consistenHash.ConsistentHashRing) (response string, err error) {
+func get(key string, etcdClient *clientv3.Client, consistenHashRing *consistenHash.ConsistentHashRing) (response string, err error) {
+	updateConsistenHashRingWithAliveNodes(etcdClient, consistenHashRing)
 	_, url := consistenHashRing.GetNode(key)
 	log.Println("Chosen url from consistent hash ring for the key:", url)
 
@@ -61,7 +123,8 @@ func get(key string, consistenHashRing *consistenHash.ConsistentHashRing) (respo
 	return string(body) + " <" + fmt.Sprintf("%4.2f", float64(elapsed)/1_000_000.0) + "ms>", err
 }
 
-func set(key, value string, consistenHashRing *consistenHash.ConsistentHashRing) (response string, err error) {
+func set(key, value string, etcdClient *clientv3.Client, consistenHashRing *consistenHash.ConsistentHashRing) (response string, err error) {
+	updateConsistenHashRingWithAliveNodes(etcdClient, consistenHashRing)
 	_, url := consistenHashRing.GetNode(key)
 	log.Println("Chosen url from consistent hash ring for the key:", url)
 	setRequest := protocol.SetRequest{
@@ -128,10 +191,8 @@ set foo=bar`)
 
 		switch {
 		case verb == "get":
-			// TODO query etc, build hash ring
 			resp, err = get(key, etcdClient, consistenHashRing)
 		case verb == "set":
-			// TODO query etc, build hash ring
 			resp, err = set(key, value, etcdClient, consistenHashRing)
 		default:
 			resp = fmt.Sprintf("failed to parse command %s", scanner.Text())

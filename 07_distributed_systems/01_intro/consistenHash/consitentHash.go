@@ -49,6 +49,10 @@ func replicaHash(nodeName string, replicaNumber int) [md5.Size]byte {
 	return md5.Sum([]byte(fmt.Sprintf("%s:%d", nodeName, replicaNumber)))
 }
 
+func (c *ConsistentHashRing) GetNodes() map[string]string {
+	return c.nodes
+}
+
 func (c *ConsistentHashRing) AddNode(nodeName string, nodeValue string) {
 	for replicaNumber := 0; replicaNumber < c.replicas; replicaNumber++ {
 		replicaHashArray := replicaHash(nodeName, replicaNumber)
@@ -75,9 +79,11 @@ func (c *ConsistentHashRing) DeleteNode(nodeName string) {
 		replicaHashArray := replicaHash(nodeName, replicaNumber)
 		index := sort.Search(len(c.replicasHashes),
 			func(i int) bool {
-				return (bytes.Equal(c.replicasHashes[i].hash[:], replicaHashArray[:]))
+				res := bytes.Compare(c.replicasHashes[i].hash[:], replicaHashArray[:])
+				return res >= 0
 			})
-		if index == len(c.replicasHashes) {
+
+		if index >= len(c.replicasHashes) {
 			panic(fmt.Sprintf("BUG! %s is not present in the hash ring", nodeName))
 		}
 		c.replicasHashes = append(c.replicasHashes[:index], c.replicasHashes[index+1:]...)

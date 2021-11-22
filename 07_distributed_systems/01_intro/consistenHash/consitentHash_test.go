@@ -29,6 +29,21 @@ func TestConsistentHashRing(t *testing.T) {
 		nodeValue := fmt.Sprintf("value%d", i)
 		hashRing.AddNode(nodeName, nodeValue)
 	}
+	for i := 0; i < NUM_NODES; i++ {
+		if i/2 == 0 {
+			// Deleting even nodes for tests
+			nodeName := fmt.Sprintf("node%03d", i)
+			hashRing.DeleteNode(nodeName)
+		}
+	}
+	for i := 0; i < NUM_NODES; i++ {
+		if i/2 == 0 {
+			// And adding even nodes back again
+			nodeName := fmt.Sprintf("node%03d", i)
+			nodeValue := fmt.Sprintf("value%d", i)
+			hashRing.AddNode(nodeName, nodeValue)
+		}
+	}
 	nodesToKeysCounter := make(map[string]float64)
 	rand.Seed(time.Now().UnixNano())
 	key := make([]byte, KEY_LENGTH)
@@ -43,6 +58,7 @@ func TestConsistentHashRing(t *testing.T) {
 			nodeName: nodeName,
 		}
 	}
+
 	sort.Slice(tmpKeys, func(i, j int) bool {
 		return (bytes.Compare(tmpKeys[i].hash[:], tmpKeys[j].hash[:]) == -1)
 	})
