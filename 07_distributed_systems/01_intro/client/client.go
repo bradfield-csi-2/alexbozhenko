@@ -3,24 +3,43 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"fmt"
 	"io"
+	"kv_store/consistenHash"
 	"kv_store/helpers"
 	"kv_store/protocol"
+	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"regexp"
 	"time"
+
+	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 const (
-	SERVER = "127.0.0.1"
-	PORT   = "8000"
+	ETCD_IP = "192.168.1.3"
 )
 
-var url string
+func updateConsistenHashRingWithAliveNodes() {
+	etcdResponse, err := etcdClient.Get(context.TODO(), "alive_servers",
+		clientv3.WithPrefix(), clientv3.WithSort(clientv3.SortByKey, clientv3.SortAscend))
+	for _, ev := range etcdResponse.Kvs {
+		parsedUrl, err := url.Parse(string(ev.Value))
+		if err == nil {
+			consistenHashRing.AddNode(parsedUrl.String(), parsedUrl.String())
+			fmt.Printf("Got node from etcd list of alive nodes. Adding it: %s\n", string(ev.Value))
+		}
+	}
 
-func get(key string) (response string, err error) {
+}
+
+func get(key string, consistenHashRing *consistenHash.ConsistentHashRing) (response string, err error) {
+	_, url := consistenHashRing.GetNode(key)
+	log.Println("Chosen url from consistent hash ring for the key:", url)
+
 	//TODO: re-use tcp connection for entire repl session?
 	getRequest := protocol.GetRequest{
 		Key: []byte(key),
@@ -42,7 +61,9 @@ func get(key string) (response string, err error) {
 	return string(body) + " <" + fmt.Sprintf("%4.2f", float64(elapsed)/1_000_000.0) + "ms>", err
 }
 
-func set(key, value string) (response string, err error) {
+func set(key, value string, consistenHashRing *consistenHash.ConsistentHashRing) (response string, err error) {
+	_, url := consistenHashRing.GetNode(key)
+	log.Println("Chosen url from consistent hash ring for the key:", url)
 	setRequest := protocol.SetRequest{
 		Key:   []byte(key),
 		Value: []byte(value),
@@ -75,17 +96,11 @@ func parseCommand(getRE, putRE *regexp.Regexp, userInput []byte) (verb, key, val
 }
 
 func usage() {
-	fmt.Fprintf(os.Stderr, "usage: client HOST PORT\n")
+	fmt.Fprintf(os.Stderr, "usage: client")
 	os.Exit(1)
 }
 
 func main() {
-	if len(os.Args) != 3 {
-		usage()
-	}
-	host := os.Args[1]
-	port := os.Args[2]
-	url = "http://" + host + ":" + port
 	getRE := regexp.MustCompile(`(get) ([^=]+)$`)
 	putRE := regexp.MustCompile(`(set) ([^=]+)=(.*)`)
 
@@ -93,11 +108,17 @@ func main() {
 	fmt.Println(`We support the following syntax:
 get foo
 set foo=bar`)
+	consistenHashRing := consistenHash.NewConsistentHashRing(100)
+	etcdClient, err := clientv3.New(clientv3.Config{
+		Endpoints:   []string{ETCD_IP + ":2379", ETCD_IP + ":22379", ETCD_IP + ":32379"},
+		DialTimeout: 5 * time.Second,
+	})
+	helpers.PanicOnError(err)
+
 	var i int = 1
 	fmt.Printf("\nIn [%d]: ", i)
 
 	var verb, key, value, resp string
-	var err error
 	scanner := bufio.NewScanner(os.Stdin)
 	for scanner.Scan() {
 
@@ -107,9 +128,11 @@ set foo=bar`)
 
 		switch {
 		case verb == "get":
-			resp, err = get(key)
+			// TODO query etc, build hash ring
+			resp, err = get(key, etcdClient, consistenHashRing)
 		case verb == "set":
-			resp, err = set(key, value)
+			// TODO query etc, build hash ring
+			resp, err = set(key, value, etcdClient, consistenHashRing)
 		default:
 			resp = fmt.Sprintf("failed to parse command %s", scanner.Text())
 		}

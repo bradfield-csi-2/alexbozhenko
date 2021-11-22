@@ -6,6 +6,7 @@ import (
 	"encoding/gob"
 	"fmt"
 	"io"
+	"kv_store/consistenHash"
 	"kv_store/helpers"
 	"kv_store/protocol"
 	"log"
@@ -50,7 +51,7 @@ type serverState struct {
 	inMemoryStorage inMemoryStorage
 	mutex           sync.RWMutex
 	storageFD       *os.File
-	hashRing        *consistentHashRing
+	hashRing        *consistenHash.ConsistentHashRing
 	url             string
 	etcdClient      *clientv3.Client
 }
@@ -137,12 +138,12 @@ func newServer(mode serverMode, urlString string) *serverState {
 			Kv:            map[string]string{},
 		},
 		storageFD:  nil,
-		hashRing:   NewConsistentHashRing(CHR_PARTITIONS_PER_NODE, CHR_NODES_NUMBER),
+		hashRing:   consistenHash.NewConsistentHashRing(CHR_PARTITIONS_PER_NODE),
 		url:        urlString,
 		etcdClient: etcdClient,
 	}
 	for i := 0; i < CHR_NODES_NUMBER; i++ {
-		server.hashRing.addNode(
+		server.hashRing.AddNode(
 			fmt.Sprintf("node:%d", i),
 			getNodeUrl(i).String(),
 		)
@@ -183,7 +184,8 @@ func (server *serverState) sendKeepAliveToEtcd() {
 			continue
 		}
 		_, err = server.etcdClient.Put(
-			context.TODO(), ETCD_KEEPALIVE_PATH_PREFIX+server.url, "It's Alive!",
+			context.TODO(), ETCD_KEEPALIVE_PATH_PREFIX+server.url,
+			server.url,
 			clientv3.WithLease(leaseGrantResponse.ID),
 		)
 		if err != nil {

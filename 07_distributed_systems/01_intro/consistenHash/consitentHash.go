@@ -1,4 +1,4 @@
-package main
+package consistenHash
 
 import (
 	"bytes"
@@ -26,7 +26,7 @@ func (r replicaHashWithNodeName) String() string {
 	return fmt.Sprintf("%x => %s:%d\n", r.hash, r.nodeName, r.replicaNumber)
 }
 
-type consistentHashRing struct {
+type ConsistentHashRing struct {
 	// how many times we create points on the hash ring for each node
 	replicas int
 	// Slice of numNodes*numReplicas hashes, that is sorted by replicaHash
@@ -36,9 +36,9 @@ type consistentHashRing struct {
 	nodes map[string]string
 }
 
-func NewConsistentHashRing(replicas, nodeNumber int) *consistentHashRing {
+func NewConsistentHashRing(replicas int) *ConsistentHashRing {
 	rHashes := make([]replicaHashWithNodeName, 0)
-	return &consistentHashRing{
+	return &ConsistentHashRing{
 		replicas:       replicas,
 		replicasHashes: rHashes,
 		nodes:          make(map[string]string),
@@ -49,7 +49,7 @@ func replicaHash(nodeName string, replicaNumber int) [md5.Size]byte {
 	return md5.Sum([]byte(fmt.Sprintf("%s:%d", nodeName, replicaNumber)))
 }
 
-func (c *consistentHashRing) addNode(nodeName string, nodeValue string) {
+func (c *ConsistentHashRing) AddNode(nodeName string, nodeValue string) {
 	for replicaNumber := 0; replicaNumber < c.replicas; replicaNumber++ {
 		replicaHashArray := replicaHash(nodeName, replicaNumber)
 		replicaHash := replicaHashWithNodeName{
@@ -70,7 +70,7 @@ func (c *consistentHashRing) addNode(nodeName string, nodeValue string) {
 	c.nodes[nodeName] = nodeValue
 }
 
-func (c *consistentHashRing) deleteNode(nodeName string) {
+func (c *ConsistentHashRing) DeleteNode(nodeName string) {
 	for replicaNumber := 0; replicaNumber < c.replicas; replicaNumber++ {
 		replicaHashArray := replicaHash(nodeName, replicaNumber)
 		index := sort.Search(len(c.replicasHashes),
@@ -86,7 +86,7 @@ func (c *consistentHashRing) deleteNode(nodeName string) {
 }
 
 // Given a key, return a node responsible for it
-func (c *consistentHashRing) getNode(key string) (nodeName string, nodeValue string) {
+func (c *ConsistentHashRing) GetNode(key string) (nodeName string, nodeValue string) {
 	keyHash := md5.Sum([]byte(key))
 	var index int
 	// find index of the first replica hash, where
@@ -111,6 +111,6 @@ func (c *consistentHashRing) getNode(key string) (nodeName string, nodeValue str
 
 }
 
-func (c *consistentHashRing) String() string {
+func (c *ConsistentHashRing) String() string {
 	return fmt.Sprint(c.replicasHashes)
 }
