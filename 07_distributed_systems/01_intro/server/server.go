@@ -176,18 +176,26 @@ func getNodeUrl(nodeNumber int) *url.URL {
 }
 
 func (server *serverState) sendKeepAliveToEtcd() {
-	leaseGrantResponse, err := server.etcdClient.Grant(context.TODO(), 5)
-	helpers.PanicOnError(err)
-	_, err = server.etcdClient.Put(
-		context.TODO(), ETCD_KEEPALIVE_PATH_PREFIX+server.url, "It's Alive!",
-		clientv3.WithLease(leaseGrantResponse.ID),
-	)
-	helpers.PanicOnError(err)
-	keepAliveResponseChannel, err := server.etcdClient.KeepAlive(context.TODO(), leaseGrantResponse.ID)
-	helpers.PanicOnError(err)
 	for {
-		select {
-		case <-keepAliveResponseChannel:
+		leaseGrantResponse, err := server.etcdClient.Grant(context.TODO(), 5)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+		_, err = server.etcdClient.Put(
+			context.TODO(), ETCD_KEEPALIVE_PATH_PREFIX+server.url, "It's Alive!",
+			clientv3.WithLease(leaseGrantResponse.ID),
+		)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+		keepAliveResponseChannel, err := server.etcdClient.KeepAlive(context.TODO(), leaseGrantResponse.ID)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+		for range keepAliveResponseChannel {
 			log.Println("Got keepAliveResponse from etcd")
 		}
 	}

@@ -46,7 +46,7 @@ func TestConsistentHashRing(t *testing.T) {
 	sort.Slice(tmpKeys, func(i, j int) bool {
 		return (bytes.Compare(tmpKeys[i].hash[:], tmpKeys[j].hash[:]) == -1)
 	})
-	for _, _ = range tmpKeys {
+	for range tmpKeys {
 		//	t.Logf("Adding hash(key):%x to %s", rH.hash, rH.nodeName)
 	}
 
