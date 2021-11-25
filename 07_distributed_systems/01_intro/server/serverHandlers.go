@@ -50,7 +50,7 @@ func (server *serverState) getHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	key := reqData.Key
-	nodeNameForCurrentKey, urlForCurrentKey := server.hashRing.getNode(string(key))
+	nodeNameForCurrentKey, urlForCurrentKey := server.hashRing.GetNode(string(key))
 	if urlForCurrentKey != server.url {
 		log.Printf("redirecting read request. key:%s to_node:%s\n",
 			key, nodeNameForCurrentKey)
@@ -81,7 +81,7 @@ func (server *serverState) putHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	key := reqData.Key
-	nodeNameForCurrentKey, urlForCurrentKey := server.hashRing.getNode(string(key))
+	nodeNameForCurrentKey, urlForCurrentKey := server.hashRing.GetNode(string(key))
 	if urlForCurrentKey != server.url {
 		log.Printf("redirecting write request. key:%s to_node:%s\n",
 			key, nodeNameForCurrentKey)

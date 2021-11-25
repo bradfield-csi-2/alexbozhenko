@@ -1,4 +1,4 @@
-package main
+package consistenHash
 
 import (
 	"bytes"
@@ -23,11 +23,26 @@ func TestConsistentHashRing(t *testing.T) {
 	t.Log("NUM_REPLICAS", NUM_REPLICAS,
 		" NUM_NODES ", NUM_NODES,
 		" NUM_KEYS_TO_ADD ", NUM_KEYS_TO_ADD)
-	hashRing := NewConsistentHashRing(NUM_REPLICAS, NUM_NODES)
+	hashRing := NewConsistentHashRing(NUM_REPLICAS)
 	for i := 0; i < NUM_NODES; i++ {
 		nodeName := fmt.Sprintf("node%03d", i)
 		nodeValue := fmt.Sprintf("value%d", i)
-		hashRing.addNode(nodeName, nodeValue)
+		hashRing.AddNode(nodeName, nodeValue)
+	}
+	for i := 0; i < NUM_NODES; i++ {
+		if i/2 == 0 {
+			// Deleting even nodes for tests
+			nodeName := fmt.Sprintf("node%03d", i)
+			hashRing.DeleteNode(nodeName)
+		}
+	}
+	for i := 0; i < NUM_NODES; i++ {
+		if i/2 == 0 {
+			// And adding even nodes back again
+			nodeName := fmt.Sprintf("node%03d", i)
+			nodeValue := fmt.Sprintf("value%d", i)
+			hashRing.AddNode(nodeName, nodeValue)
+		}
 	}
 	nodesToKeysCounter := make(map[string]float64)
 	rand.Seed(time.Now().UnixNano())
@@ -36,17 +51,18 @@ func TestConsistentHashRing(t *testing.T) {
 	tmpKeys := make([]replicaHashWithNodeName, NUM_KEYS_TO_ADD)
 	for i := 0; i < NUM_KEYS_TO_ADD; i++ {
 		rand.Read(key)
-		nodeName, _ := hashRing.getNode(string(key))
+		nodeName, _ := hashRing.GetNode(string(key))
 		nodesToKeysCounter[nodeName]++
 		tmpKeys[i] = replicaHashWithNodeName{
 			hash:     md5.Sum(key),
 			nodeName: nodeName,
 		}
 	}
+
 	sort.Slice(tmpKeys, func(i, j int) bool {
 		return (bytes.Compare(tmpKeys[i].hash[:], tmpKeys[j].hash[:]) == -1)
 	})
-	for _, _ = range tmpKeys {
+	for range tmpKeys {
 		//	t.Logf("Adding hash(key):%x to %s", rH.hash, rH.nodeName)
 	}
 

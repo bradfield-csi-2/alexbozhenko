@@ -2,21 +2,28 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/gob"
 	"fmt"
 	"io"
+	"kv_store/consistenHash"
 	"kv_store/helpers"
 	"kv_store/protocol"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
+
+	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 const (
 	SERVER                     = "127.0.0.1"
+	ETCD_IP                    = "192.168.1.3"
 	PRIMARY_PORT               = 8000
 	PARTITION_PORT_OFFSET      = 1000
 	SYNCHRONOUS_FOLLOWER_PORT  = "8001"
@@ -25,6 +32,7 @@ const (
 	ASYNC_FOLLOWER_URL         = "http://" + SERVER + ":" + ASYNCHRONOUS_FOLLOWER_PORT
 	STORAGE_FILE_PREFIX        = "storage"
 	WAL_FILEPATH               = "wal"
+	ETCD_KEEPALIVE_PATH_PREFIX = "alive_servers/"
 
 	//Consistent Hash Ring config:
 	CHR_NODES_NUMBER        = 3
@@ -43,8 +51,9 @@ type serverState struct {
 	inMemoryStorage inMemoryStorage
 	mutex           sync.RWMutex
 	storageFD       *os.File
-	hashRing        *consistentHashRing
+	hashRing        *consistenHash.ConsistentHashRing
 	url             string
+	etcdClient      *clientv3.Client
 }
 
 // This function must be called only when
@@ -115,6 +124,11 @@ func newServer(mode serverMode, urlString string) *serverState {
 	}
 	storageFilename := strings.Join([]string{STORAGE_FILE_PREFIX, fmt.Sprint(mode), port}, "_")
 
+	etcdClient, err := clientv3.New(clientv3.Config{
+		Endpoints:   []string{ETCD_IP + ":2379", ETCD_IP + ":22379", ETCD_IP + ":32379"},
+		DialTimeout: 5 * time.Second,
+	})
+	helpers.PanicOnError(err)
 	server = &serverState{
 		walFD:         walFD,
 		walGobEncoder: gob.NewEncoder(walFD),
@@ -123,12 +137,13 @@ func newServer(mode serverMode, urlString string) *serverState {
 			TransactionID: 0,
 			Kv:            map[string]string{},
 		},
-		storageFD: nil,
-		hashRing:  NewConsistentHashRing(CHR_PARTITIONS_PER_NODE, CHR_NODES_NUMBER),
-		url:       urlString,
+		storageFD:  nil,
+		hashRing:   consistenHash.NewConsistentHashRing(CHR_PARTITIONS_PER_NODE),
+		url:        urlString,
+		etcdClient: etcdClient,
 	}
 	for i := 0; i < CHR_NODES_NUMBER; i++ {
-		server.hashRing.addNode(
+		server.hashRing.AddNode(
 			fmt.Sprintf("node:%d", i),
 			getNodeUrl(i).String(),
 		)
@@ -150,6 +165,7 @@ func (srv *serverState) shutDown() {
 		srv.walFD.Close()
 	}
 	srv.storageFD.Close()
+	srv.etcdClient.Close()
 }
 
 func getNodeUrl(nodeNumber int) *url.URL {
@@ -158,6 +174,33 @@ func getNodeUrl(nodeNumber int) *url.URL {
 	helpers.PanicOnError(err)
 	return url
 
+}
+
+func (server *serverState) sendKeepAliveToEtcd() {
+	for {
+		leaseGrantResponse, err := server.etcdClient.Grant(context.TODO(), 5)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+		_, err = server.etcdClient.Put(
+			context.TODO(), ETCD_KEEPALIVE_PATH_PREFIX+server.url,
+			server.url,
+			clientv3.WithLease(leaseGrantResponse.ID),
+		)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+		keepAliveResponseChannel, err := server.etcdClient.KeepAlive(context.TODO(), leaseGrantResponse.ID)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+		for range keepAliveResponseChannel {
+			log.Println("Got keepAliveResponse from etcd")
+		}
+	}
 }
 
 func main() {
@@ -218,5 +261,11 @@ func main() {
 
 	http.HandleFunc("/async-catchup", server.walGetHandler)
 
+	go server.sendKeepAliveToEtcd()
+	// TODO: alexbozhenko for Oz:
+	// Is this a race condition?
+	// We start sending KeepAlives before server got a chance to start listening
+	// What will be the proper way of start sending keepAlives only
+	// after we started listening?
 	http.ListenAndServe(serverUrl.Host, nil)
 }
