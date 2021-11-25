@@ -4,6 +4,7 @@ import (
 	"encoding/gob"
 	"fmt"
 	"io"
+	"kv_store/helpers"
 	"log"
 	"net/http"
 	"os"
@@ -23,7 +24,7 @@ func addToWAL(server *serverState, key, value string, w http.ResponseWriter) err
 		Value: value,
 	}
 	err := server.walGobEncoder.Encode(&wr)
-	if errorResponse(&w, err, http.StatusInternalServerError) != nil {
+	if helpers.ErrorResponse(&w, err, http.StatusInternalServerError) != nil {
 		server.mutex.Unlock()
 		return err
 	}
@@ -64,18 +65,18 @@ func readWAL(server *serverState, minId uint64) (inMemoryStorage, error) {
 func (server *serverState) walGetHandler(w http.ResponseWriter, r *http.Request) {
 	walNumbers, ok := r.URL.Query()["since"]
 	if !ok {
-		errorResponse(&w,
+		helpers.ErrorResponse(&w,
 			fmt.Errorf("since parameter is not found in the request"),
 			http.StatusBadRequest)
 		return
 	}
 
 	walNumber, err := strconv.ParseUint(walNumbers[0], 10, 64)
-	if errorResponse(&w, err, http.StatusBadRequest) != nil {
+	if helpers.ErrorResponse(&w, err, http.StatusBadRequest) != nil {
 		return
 	}
 	diff, err := readWAL(server, walNumber)
-	if errorResponse(&w, err, http.StatusInternalServerError) != nil {
+	if helpers.ErrorResponse(&w, err, http.StatusInternalServerError) != nil {
 		return
 	}
 	encoder := gob.NewEncoder(w)
@@ -91,7 +92,8 @@ func (server *serverState) pullPrimaryForUpdatesForever() {
 }
 
 func (server *serverState) pullPrimaryForUpdates() {
-	req, err := http.NewRequest(http.MethodGet, "http://"+PRIMARY_URL+"/async-catchup", nil)
+	req, err := http.NewRequest(http.MethodGet, "http://"+
+		SERVER+":"+fmt.Sprint(PRIMARY_PORT)+"/async-catchup", nil)
 	if err != nil {
 		fmt.Fprint(os.Stderr, err)
 		return

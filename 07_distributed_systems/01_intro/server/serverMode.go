@@ -12,6 +12,8 @@ func (mode serverMode) String() string {
 	switch mode {
 	case PRIMARY:
 		return "primary"
+	case PRIMARY_PARTITION:
+		return "primary_partition"
 	case SYNCHRONOUS_FOLLOWER:
 		return "sync_follower"
 	case ASYNCHRONOUS_FOLLOWER:
@@ -25,4 +27,5 @@ const (
 	PRIMARY = serverMode(iota)
 	SYNCHRONOUS_FOLLOWER
 	ASYNCHRONOUS_FOLLOWER
+	PRIMARY_PARTITION
 )
