@@ -72,3 +72,7 @@ dkms.conf
 
 # Dependency directories (remove the comment below to include it)
 # vendor/
+/.idea/.gitignore
+/.idea/csi.iml
+/.idea/modules.xml
+/.idea/vcs.xml
