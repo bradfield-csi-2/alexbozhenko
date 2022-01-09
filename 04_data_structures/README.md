@@ -8,7 +8,7 @@ Description of the module from the official [csi page](https://bradfieldcs.com/c
 - [05 Exploring LevelDB](./05_levelDB/)
 - [06 Exploring Merkle Hash Trees](./06_merkle_hash_trees/)
 - [07 Implement an uncompressed Bitmap, and explore compression schemes](./07_roaring_bitmaps/)[]
-- [08 TBD](./08_hyperLogLog/)
+- [08 Exploring HyperLogLog for estimating set cardinality](./08_hyperLogLog/)
 
 
 
