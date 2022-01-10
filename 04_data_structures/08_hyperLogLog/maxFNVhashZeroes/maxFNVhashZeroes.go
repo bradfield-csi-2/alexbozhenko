@@ -25,8 +25,7 @@ func countTrailingZeroes(b []byte) (i int) {
 }
 func byteSliceToBinString(b []byte) (res string) {
 	for _, n := range b {
-		//TODO fix format
-		res = res + fmt.Sprintf("% 08b", n)
+		res = res + fmt.Sprintf("%08b ", n)
 	}
 	return
 }
@@ -44,7 +43,10 @@ func main() {
 	log.SetLevel(log.TraceLevel)
 	for scanner.Scan() {
 		word := scanner.Bytes()
-		fnvHash.Write(word)
+		_, err := fnvHash.Write(word)
+		if err != nil {
+			panic(err)
+		}
 		wordHash := fnvHash.Sum([]byte{})
 		zeroes := countTrailingZeroes(wordHash)
 		log.Tracef("word=%s hash=%s zeroes=%d\n", string(word), byteSliceToBinString(wordHash), zeroes)
