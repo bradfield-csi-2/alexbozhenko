@@ -1,4 +1,4 @@
-module maxFNVhashZeroe
+module maxFNVhashZeroes
 
 go 1.17
 
