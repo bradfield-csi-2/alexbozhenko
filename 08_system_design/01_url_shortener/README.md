@@ -8,13 +8,14 @@ Design a system where user-supplied URLs are turned into “shortened” version
 * 1 generated link will result in 100 reads on average over lifetime of the URL
 * Capture as much data as possible about users activity
 
-## Non-functional requirement
+## Non-functional requirements
 * Low redirect latency
 * Extremely high availability target
 
 
 ## Estimations
 ### Write RPS:
+<!-- http://www.sciweavers.org/free-online-latex-equation-editor -->
 ```
       7                       7                             
 1 * 10  URLs           1  * 10  URLs          2             
@@ -67,4 +68,16 @@ Writes(url+shortened url) may fit on a single server.
 Reads ~ read log data needs to be distributed.
 Generated log size won't fit on a single server, and also write IOPS rate would not fit(if we use HDDs, not SSDs).
 
+## Initial design
+
+* Single PostgreSQL master, hosting a db containing mapping of short urls to long urls. Indexed on short urls column.
+  * Same server hosts backend app serving creation of the URLs and stats dashboard.
+  * `shortener.shadycorp.com` is behind a loadbalancer, pointing to this single server.
+  * In case of a crash, any of the replicas can be manually assigned to be a new master.
+* 16 read-only postgresql replicas, each containing entire copy of the db.
+  * Each of the replicas run proxy app that, upon receiving a request, looks up the long url in it's local RO postgres replica.
+  * This proxy app also logs all the details about the client in local log.
+  * Let's say raw logs are truncated(or archived to cold storage) after one year, so such server can have 16 4TB HDDs to fit all the logs.
+  * All replicas are behind round-robin load balancer.
+* There is map-reduce job that pulls logs from all the proxies, let's say, every 5 minutes, and writes aggregated stats about each url into master PostgreSQL instance. 
 
