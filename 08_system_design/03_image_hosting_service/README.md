@@ -74,7 +74,20 @@ Image downloads:
 ```
 
 ### Resizing images
-Assuming that producing resized images takes 1 second,
-we should ...
+Assuming that producing resized images takes 1 second, 
+for 10 image upload RPS, we should at least `10` workers.
 
 ## Design
+* 3 tier WEB app for showing and uploading the images
+* Images should be stored in some kind of object storage, e.g. Amazon S3, or on-perm deployed Openstack Swift
+* We use wide-column DB, e.g. Cassandra, where for each image ID we will store image metadata, views count, timestamps, etc...
+* In wide-column store schema can be changed later as needed(e.g. new fields added)
+* For each image we create a separate directory in the object store. Name of the directory is the image UUID. Inside the directory we will have original and resized images.
+* There are N resize workers and also a message broker for passing around resize requests, where N should be enough to handle spikes
+* When uploading an image, we upload original directly to the object storage, and also put resize request with the image UUID to the message queue
+* For input validation we check the "magic number" on the server side, and return error 422 to the user if file is not an image
+* Availability targets are covered by using object storage, which stores multiple copies under the hood. So there is no single points of failure.
+
+Questions:
+* How to count views? We can use either stream processing or batch processing for counting image views and storing that data in Cassandra?
+
